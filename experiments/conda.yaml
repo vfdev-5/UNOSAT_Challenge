@@ -1,0 +1,25 @@
+name: UNOSAT_Challenge_env
+channels:
+  - defaults
+  - pytorch
+dependencies:
+  - python=3.7
+  - numpy
+  - pandas
+  - scikit-learn
+  - pytorch>=1.3.1
+  - pip
+  - gdal
+  - captum
+  - pip:
+    - mlflow
+    - tqdm
+    - pynvml
+    - tensorboardX
+    - albumentations
+    - torchvision
+    - py_config_runner
+    - git+https://github.com/pytorch/ignite.git
+    - tiling
+    - rasterio
+
