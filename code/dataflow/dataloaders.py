@@ -1,12 +1,36 @@
 from typing import Type, Callable, Optional, Tuple, Union
+from pathlib import Path
 
 import numpy as np
 
+import tqdm
+import torch
+from torch.utils.data.sampler import WeightedRandomSampler
 from torch.utils.data import DataLoader, Sampler
 from torch.utils.data.dataset import Dataset, Subset
 import torch.utils.data.distributed as data_dist
 
 from dataflow.transforms import TransformedDataset
+
+
+def get_train_sampler(train_dataset, weight_per_class, cache_dir="/tmp/unosat/"):
+    cache_dir = Path(cache_dir)
+    if not cache_dir.exists():
+        cache_dir.mkdir(parents=True)
+
+    fp = cache_dir / "train_sampler_weights_{}__{}.pth".format(len(train_dataset),
+                                                               repr(weight_per_class).replace(", ", "_"))
+    if fp.exists():
+        weights = torch.load(fp.as_posix())
+    else:
+        weights = torch.tensor([0.0] * len(train_dataset))
+        for i, dp in tqdm.tqdm(enumerate(train_dataset), total=len(train_dataset)):
+            y = (dp['mask'] > 0).any()
+            weights[i] = weight_per_class[y]
+        torch.save(weights, fp.as_posix())
+
+    sampler = WeightedRandomSampler(weights, num_samples=len(weights), replacement=True)
+    return sampler
 
 
 def get_train_val_loaders(train_ds: Type[Dataset],

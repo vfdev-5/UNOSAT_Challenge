@@ -20,6 +20,7 @@ dependencies:
     - torchvision
     - py_config_runner
     - git+https://github.com/pytorch/ignite.git
+    - git+https://github.com/vfdev-5/ImageDatasetViz.git
     - tiling
     - rasterio
 

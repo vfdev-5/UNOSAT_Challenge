@@ -53,7 +53,7 @@ class UnoSatTiles(Dataset):
             "image": self.images[index],
             "mask": self.masks[index],
             "meta": {
-                "image_path": self.images[index],
+                "image_path": self.images[index].as_posix(),
                 "image_id": index
             }
         }
@@ -138,7 +138,7 @@ class UnoSatTestTiles(Dataset):
         return {
             "image": self.images[index],
             "meta": {
-                "image_path": self.images[index],
+                "image_path": self.images[index].as_posix(),
                 "image_id": index
             }
         }

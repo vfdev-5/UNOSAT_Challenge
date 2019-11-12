@@ -8,31 +8,31 @@ entry_points:
     parameters:
       input_path: str
       output_path: str
-    command: "source env.sh && python ../code/scripts/generate_3b_images.py {input_path} {output_path}"
+    command: "source env.sh && python ../code/scripts/jobs/generate_3b_images.py {input_path} {output_path}"
 
   rasterize:
     parameters:
       input_path: str
       output_path: str
-    command: "source env.sh && python ../code/scripts/generate_masks.py {input_path} {output_path}"
+    command: "source env.sh && python ../code/scripts/jobs/generate_masks.py {input_path} {output_path}"
 
   generate_tiles:
     parameters:
       input_path: str
       output_path: str
-    command: "source env.sh && python ../code/scripts/generate_tiles.py const_size {input_path} {output_path} 512 512 32 --extensions='tif'"
+    command: "source env.sh && python ../code/scripts/jobs/generate_tiles.py const_size {input_path} {output_path} 512 512 32 --extensions='tif'"
 
   generate_tiles_stats:
     parameters:
       input_path: str
       output_path: str
-    command: "source env.sh && python ../code/scripts/generate_tiles_stats.py {input_path} {output_path}"
+    command: "source env.sh && python ../code/scripts/jobs/generate_tiles_stats.py {input_path} {output_path}"
 
   generate_test_tiles:
     parameters:
       input_path: str
       output_path: str
-    command: "source env.sh && python ../code/scripts/generate_tiles.py const_stride {input_path} {output_path} 512 512 512 512 --extensions='tif'"
+    command: "source env.sh && python ../code/scripts/jobs/generate_tiles.py const_stride {input_path} {output_path} 512 512 512 512 --extensions='tif'"
 
   main:
     parameters:

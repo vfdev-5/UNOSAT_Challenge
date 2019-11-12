@@ -11,25 +11,7 @@ except ImportError:
     raise RuntimeError("Install it via pip install --upgrade git+https://github.com/vfdev-5/ImageDatasetViz.git")
 
 
-def _getvocpallete(num_cls):
-    n = num_cls
-    pallete = [0]*(n*3)
-    for j in range(0, n):
-        lab = j
-        pallete[j*3+0] = 0
-        pallete[j*3+1] = 0
-        pallete[j*3+2] = 0
-        i = 0
-        while lab > 0:
-            pallete[j*3+0] |= (((lab >> 0) & 1) << (7-i))
-            pallete[j*3+1] |= (((lab >> 1) & 1) << (7-i))
-            pallete[j*3+2] |= (((lab >> 2) & 1) << (7-i))
-            i = i + 1
-            lab >>= 3
-    return pallete
-
-
-default_palette = _getvocpallete(256)
+default_palette = (0, 0, 0, 0, 255, 0)
 
 
 def render_mask(mask: Union[np.ndarray, Image.Image],
@@ -55,60 +37,8 @@ def render_image(img):
     return (255 * instance_normalize(img)).astype(np.uint8)
 
 
-from typing import Union, Callable, Optional, Sequence
-
-import numpy as np
-from PIL import Image
-
-import torch
-
-try:
-    from image_dataset_viz import render_datapoint
-except ImportError:
-    raise RuntimeError("Install it via pip install --upgrade git+https://github.com/vfdev-5/ImageDatasetViz.git")
-
-
-from dataflow.datasets import ISPRSTilesDataset
-
-
-isprs_palette = []
-for c in ISPRSTilesDataset.train_ids:
-    isprs_palette += list(c)
-
-
-def _getvocpallete(num_cls):
-    n = num_cls
-    pallete = [0]*(n*3)
-    for j in range(0, n):
-        lab = j
-        pallete[j*3+0] = 0
-        pallete[j*3+1] = 0
-        pallete[j*3+2] = 0
-        i = 0
-        while lab > 0:
-            pallete[j*3+0] |= (((lab >> 0) & 1) << (7-i))
-            pallete[j*3+1] |= (((lab >> 1) & 1) << (7-i))
-            pallete[j*3+2] |= (((lab >> 2) & 1) << (7-i))
-            i = i + 1
-            lab >>= 3
-    return pallete
-
-
-default_palette = _getvocpallete(256)
-
-
-def render_mask(mask: Union[np.ndarray, Image.Image],
-                palette: Sequence) -> Image.Image:
-    if isinstance(mask, np.ndarray):
-        mask = Image.fromarray(mask)
-    mask.putpalette(palette)
-    mask = mask.convert(mode='RGB')
-    return mask
-
-
-def tensor_to_rgb(t: torch.Tensor) -> np.ndarray:
-    img = t.cpu().numpy().transpose((1, 2, 0))
-    return img.astype(np.uint8)
+def tensor_to_numpy(t: torch.Tensor) -> np.ndarray:
+    return t.cpu().numpy().transpose((1, 2, 0))
 
 
 def make_grid(batch_img: torch.Tensor,
@@ -153,7 +83,8 @@ def make_grid(batch_img: torch.Tensor,
         mask = batch_mask[i]
 
         img = img_denormalize_fn(img)
-        img = tensor_to_rgb(img)
+        img = tensor_to_numpy(img)
+        img = render_image(img)
         mask = mask.cpu().numpy()
         mask = render_mask(mask, mask_palette)
 

@@ -3,7 +3,7 @@ from typing import Union, Optional, Sequence
 from pathlib import Path
 import numpy as np
 
-import gdal
+import osgeo.gdal as gdal
 
 import rasterio as rio
 from rasterio.windows import Window, intersection
