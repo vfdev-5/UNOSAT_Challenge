@@ -32,10 +32,30 @@ entry_points:
     parameters:
       input_path: str
       output_path: str
-    command: "source env.sh && python ../code/scripts/jobs/generate_tiles.py const_stride {input_path} {output_path} 512 512 512 512 --extensions='tif'"
+    command: "source env.sh && python ../code/scripts/jobs/generate_tiles.py const_stride {input_path} {output_path} 2048 2048 2048 2048 --extensions='tif'"
 
   main:
     parameters:
       script_path: path
       config_path: path
-    command: "source env.sh && sh setup_apex.sh && python -m py_config_runner.__main__ {script_path} {config_path}"
+    command: "source env.sh && sh setup_apex.sh && python -m py_config_runner {script_path} {config_path}"
+
+  to_submission:
+    parameters:
+      input_path: path
+    command: "sh merge_tiles.sh {input_path} && source env.sh && python ../code/scripts/jobs/all_agg_by_city.py {input_path} && sh polygonize.sh {input_path}"
+    
+  merge_tiles:
+    parameters:
+      input_path: path
+    command: "sh merge_tiles.sh {input_path}"
+
+  all_agg_by_city:
+    parameters:
+      input_path: path
+    command: "source env.sh && python ../code/scripts/jobs/all_agg_by_city.py {input_path}"
+    
+  polygonize:
+    parameters:
+      input_path: path
+    command: "sh polygonize.sh {input_path}"

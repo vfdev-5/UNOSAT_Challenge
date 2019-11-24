@@ -206,3 +206,16 @@ def get_driver_from_extension(ext):
     if ext in EXTENSIONS_GDAL_DRIVER_CODE_MAP:
         return EXTENSIONS_GDAL_DRIVER_CODE_MAP[ext]
     return None
+
+
+def write_prediction_with_geoinfo(y_pred, filepath, ref_image_fp):
+    assert isinstance(y_pred, np.ndarray) and y_pred.ndim == 2, \
+        "{} and {}".format(type(y_pred), y_pred.shape if isinstance(y_pred, np.ndarray) else None)
+
+    filepath = filepath + ".tif"
+    with rio.open(ref_image_fp, 'r') as src:
+        profile = src.profile
+        profile.update(dtype=rio.uint8, count=1)
+
+        with rio.open(filepath, 'w', **profile) as dst:
+            dst.write(y_pred.astype(rio.uint8), 1)

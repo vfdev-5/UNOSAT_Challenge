@@ -139,6 +139,6 @@ class UnoSatTestTiles(Dataset):
             "image": self.images[index],
             "meta": {
                 "image_path": self.images[index].as_posix(),
-                "image_id": index
+                "index": index
             }
         }

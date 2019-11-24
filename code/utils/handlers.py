@@ -3,6 +3,7 @@ from pathlib import Path
 import torch
 
 from dataflow.vis import make_grid, write_prediction, write_prediction_on_image, tensor_to_numpy, render_image
+from dataflow.io_utils import write_prediction_with_geoinfo
 
 
 def predictions_gt_images_handler(img_denormalize_fn, n_images=None, another_engine=None, prefix_tag=None):
@@ -52,7 +53,9 @@ def _check_meta(output):
 def _default_meta_image_path_transform(output_path, meta_image_path):
     output_path = Path(output_path)
     fname = Path(meta_image_path).stem
-    fp = output_path / fname
+    subfolder = Path(meta_image_path).parent.name
+    (output_path / subfolder).mkdir(exist_ok=True, parents=True)
+    fp = output_path / subfolder / fname
     return fp.as_posix()
 
 
@@ -98,6 +101,24 @@ def save_overlayed_predictions(engine, output_path, img_denormalize_fn,
         x = render_image(x)
 
         write_prediction_on_image(y_pred, x, fp, palette=palette)
+
+
+def save_raw_predictions_with_geoinfo(engine, output_path, meta_image_path_transform=None):
+    output = engine.state.output
+
+    _check_meta(output)
+    meta = output['meta']
+
+    if meta_image_path_transform is None:
+        meta_image_path_transform = _default_meta_image_path_transform
+
+    # Save raw predictions
+    y_probas = output['y_pred']
+    y_preds = torch.argmax(y_probas, dim=1).byte()
+    y_preds = y_preds.cpu().numpy()
+    for y_pred, p in zip(y_preds, meta['image_path']):
+        fp = meta_image_path_transform(output_path, p)
+        write_prediction_with_geoinfo(y_pred, fp, ref_image_fp=p)
 
 
 def report_exception(engine, e):

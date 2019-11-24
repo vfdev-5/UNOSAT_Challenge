@@ -10,6 +10,7 @@
     - quality of targets ?
     - same shape for multiple images of the same region -> still correct targets ?
     - shape rasterization produces mask for zero ortho-rectified part of image
+    - on test data, we can reduce variance using multiple images per city
 
 * [ ] Dataflow
     * [x] Merge VV / VH -> (VH, VV, (VH + VV) * 0.5)
@@ -20,15 +21,29 @@
 
 * [ ] Trainings
     * [x] Train a Light-Weight RefineNet model
+    * [ ] Train DeeplabV3 model
     * [x] Sampling based on target
+
+* [ ] Ideas to accelerate/improve training    
+    * [ ] Implement data echoing/minibatch persistence to accelerate trainings 
     * [ ] Label smoothing
+    * [ ] Model with OctConv
     * [ ] Train a pre-segmentation classifier ?
+    * [ ] Use CrossEntropy + Jaccard loss
     * [ ] Try to implement and train GSCNN model
 
-* [ ] Inferences
-    * [ ] Handler to save images with predictions: `[img, img+preds, preds, img+gt, gt]` with a metric value, e.g. `IoU(1)`
-    * [ ] Handler to vectorize masks   
+* [ ] Training strategy 1
+    * [ ] Train on all data without validation
+        * [ ] 
 
+* [ ] Inferences
+    * [ ] Handler to save images with predictions: `[img, img+preds, preds, img+gt, gt]` with a metric value, e.g. `IoU(1)`    
+    * [x] Handler to save predictions as images with geo info(tile level)
+    * [x] Script to aggregate predictions as images for the same city
+        * [x] Check if images has the same geo extension    
+    * [x] Script to vectorize masks into shapefiles (city level)    
+    
+* [ ] Check submission score on which part of data
 
 
 ## MLflow setup
@@ -95,6 +110,32 @@ mlflow run experiments/ --experiment-name=Trainings -P script_path=code/scripts/
 export MLFLOW_TRACKING_URI=$PWD/output/mlruns
 mlflow run experiments/ --experiment-name=Inferences -P script_path=code/scripts/inference.py -P config_path=configs/inference/XXX.py
 ```
+
+## Transform predictions to submission format
+
+```bash
+export MLFLOW_TRACKING_URI=$PWD/output/mlruns
+mlflow run experiments/ -e to_submission -P input_path=output/mlruns/2/XYZ/artifacts/raw
+```
+
+### or manually every step
+
+1) Merge tiles into a single mask image:
+```bash
+export MLFLOW_TRACKING_URI=$PWD/output/mlruns
+mlflow run experiments/ -e merge_tiles -P input_path=output/mlruns/2/XYZ/artifacts/raw
+```
+
+2) Aggregate predictions by city
+```bash
+mlflow run experiments/ -e all_agg_by_city -P input_path=output/mlruns/2/XYZ/artifacts/raw/
+```
+
+3) Vectorize predictions
+```bash
+mlflow run experiments/ -e polygonize -P input_path=output/mlruns/2/XYZ/artifacts/raw/
+```
+
 
 ### MLflow dashboard
 

@@ -18,7 +18,7 @@ from py_config_runner.config_utils import get_params, TORCH_DL_BASE_CONFIG, asse
 from py_config_runner.utils import set_seed
 
 from utils.commons import get_artifact_path
-from utils.handlers import save_raw_predictions, save_overlayed_predictions, report_exception
+from utils.handlers import save_raw_predictions_with_geoinfo, save_overlayed_predictions, report_exception
 from dataflow.vis import default_palette
 
 
@@ -122,12 +122,9 @@ def inference(config):
         raw_preds_path = config.output_path / "raw"
         raw_preds_path.mkdir(parents=True)
 
-        preds_palette = (0, 0, 0, 255, 255, 0)
-
         evaluator.add_event_handler(Events.ITERATION_COMPLETED,
-                                    save_raw_predictions,
-                                    raw_preds_path,
-                                    palette=preds_palette)
+                                    save_raw_predictions_with_geoinfo,
+                                    raw_preds_path)
 
     if do_save_overlayed_predictions:
         overlayed_preds_path = config.output_path / "overlay"

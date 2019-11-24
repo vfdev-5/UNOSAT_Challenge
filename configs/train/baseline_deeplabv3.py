@@ -7,6 +7,8 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.optim.lr_scheduler as lrs
 
+from torchvision.models.segmentation import deeplabv3_resnet101
+
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 
@@ -14,7 +16,6 @@ from dataflow.datasets import get_trainval_datasets
 from dataflow.dataloaders import get_train_val_loaders, get_train_sampler
 from dataflow.transforms import prepare_batch_fp32, denormalize
 
-from models import LWRefineNet
 
 #################### Globals ####################
 
@@ -41,7 +42,7 @@ train_ds, val_ds = get_trainval_datasets(data_path, csv_path, train_folds=train_
 
 train_sampler = get_train_sampler(train_ds, weight_per_class=(0.7, 0.3))
 
-batch_size = 22
+batch_size = 10
 num_workers = 12
 val_batch_size = 20
 
@@ -84,7 +85,7 @@ train_loader, val_loader, train_eval_loader = get_train_val_loaders(
     limit_val_num_samples=100 if debug else None
 )
 
-# accumulation_steps = 8
+accumulation_steps = 4
 
 prepare_batch = prepare_batch_fp32
 
@@ -93,15 +94,18 @@ img_denormalize = partial(denormalize, mean=mean, std=std)
 
 #################### Model ####################
 
-model = LWRefineNet(num_channels=3, num_classes=num_classes)
+model = deeplabv3_resnet101(num_classes=num_classes)
+
+def model_output_transform(y_pred):
+    return y_pred['out']
 
 #################### Solver ####################
 
 num_epochs = 100
 
-criterion = nn.CrossEntropyLoss(weight=torch.tensor([0.1, 2.0]))
+criterion = nn.CrossEntropyLoss(weight=torch.tensor([0.5, 2.0]))
 
-lr = 0.05
+lr = 0.023
 weight_decay = 5e-4
 momentum = 0.9
 nesterov = True
