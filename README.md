@@ -47,6 +47,14 @@
     
 * [x] Check submission score on which part of data => F1 score is computed on whole test dataset
 
+## Results
+
+Experiment | Validation IoU(1)| Validation F1 | Test F1 | Notes
+---|---|---|---|---
+[baseline_lwrefinenet.py](configs/train/baseline_lwrefinenet.py)| 0.648 | 0.891 | 0.688175 | LWRefineNet with CrossEntropy, validation city "38SNE"
+[baseline_lwrefinenet_xentropy_jaccard.py](configs/train/baseline_lwrefinenet_xentropy_jaccard.py)| 0.668 | 0.899 |  | LWRefineNet with CrossEntropy+2*Jaccard, validation city "38SNE"
+[baseline_lwrefinenet_xentropy_jaccard_tta.py](configs/train/baseline_lwrefinenet_xentropy_jaccard.py)| 0.668 | 0.899 |  | LWRefineNet with CrossEntropy+2*Jaccard, validation city "38SNE"
+
 
 ## Requirements
 

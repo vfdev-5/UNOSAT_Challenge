@@ -10,8 +10,6 @@ import torch.optim.lr_scheduler as lrs
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 
-import ttach as tta
-
 from dataflow.datasets import get_trainval_datasets
 from dataflow.dataloaders import get_train_val_loaders
 from dataflow.transforms import inference_prepare_batch_f32, denormalize, TransformedDataset
@@ -29,7 +27,7 @@ num_classes = 2
 #################### Dataflow ####################
 
 assert "INPUT_PATH" in os.environ
-data_path = os.path.join(os.environ['INPUT_PATH'], "test_tiles")
+data_path = os.path.join(os.environ['INPUT_PATH'], "train_tiles")
 csv_path = os.path.join(data_path, "tile_stats.csv")
 
 train_folds = [0, 1, 2]
@@ -38,7 +36,7 @@ val_folds = [3, ]
 train_ds, val_ds = get_trainval_datasets(data_path, csv_path, train_folds=train_folds, val_folds=val_folds)
 
 
-batch_size = 4
+batch_size = 32
 num_workers = 12
 
 mean = (0.0, 0.0, 0.0)
@@ -74,5 +72,3 @@ weights_filename = "checkpoint_model_28000.pth"
 
 
 has_targets = True
-
-tta_transforms = tta.aliases.d4_transform()

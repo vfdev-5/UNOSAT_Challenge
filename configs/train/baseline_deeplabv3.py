@@ -40,23 +40,23 @@ val_folds = [2, ]
 
 train_ds, val_ds = get_trainval_datasets(data_path, csv_path, train_folds=train_folds, val_folds=val_folds)
 
-train_sampler = get_train_sampler(train_ds, weight_per_class=(0.65, 0.35))
+train_sampler = get_train_sampler(train_ds, weight_per_class=(0.7, 0.3))
 
 batch_size = 10
-num_workers = 18
+num_workers = 16
 val_batch_size = 20
 
 # According to https://arxiv.org/pdf/1906.06423.pdf
 # For example: Train size: 224 -> Test size: 320 = max accuracy on ImageNet with ResNet-50
 val_img_size = 512
-train_img_size = 420
+train_img_size = 480
 
 mean = (0.0, 0.0, 0.0)
 std = (5.0, 5.0, 5.0)
 max_value = 1.0
 
 train_transforms = A.Compose([
-    A.RandomResizedCrop(train_img_size, train_img_size, scale=(0.9, 1.0), ratio=(0.9, 1.1)),
+    A.RandomResizedCrop(train_img_size, train_img_size, scale=(0.8, 1.0), ratio=(0.9, 1.1)),
     A.OneOf([
         A.RandomRotate90(),
         A.Flip(),

@@ -102,7 +102,7 @@ def training(config):
         "Accuracy": cmAccuracy(cm_metric),
         "Precision": pr,
         "Recall": re,
-        # "F1": Fbeta(beta=1.0, output_transform=output_transform)
+        "F1": Fbeta(beta=1.0, output_transform=output_transform)
     }
 
     if hasattr(config, "val_metrics") and isinstance(config.val_metrics, dict):

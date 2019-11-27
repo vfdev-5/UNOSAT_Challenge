@@ -36,7 +36,7 @@ val_folds = [3, ]
 train_ds, val_ds = get_trainval_datasets(data_path, csv_path, train_folds=train_folds, val_folds=val_folds)
 
 
-batch_size = 16
+batch_size = 32
 num_workers = 12
 
 mean = (0.0, 0.0, 0.0)
