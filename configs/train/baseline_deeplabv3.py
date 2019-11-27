@@ -25,7 +25,7 @@ device = 'cuda'
 fp16_opt_level = "O2"
 
 num_classes = 2
-val_interval = 3
+val_interval = 1
 
 start_by_validation = False
 
@@ -40,27 +40,28 @@ val_folds = [2, ]
 
 train_ds, val_ds = get_trainval_datasets(data_path, csv_path, train_folds=train_folds, val_folds=val_folds)
 
-train_sampler = get_train_sampler(train_ds, weight_per_class=(0.7, 0.3))
+train_sampler = get_train_sampler(train_ds, weight_per_class=(0.65, 0.35))
 
 batch_size = 10
-num_workers = 12
+num_workers = 18
 val_batch_size = 20
 
 # According to https://arxiv.org/pdf/1906.06423.pdf
 # For example: Train size: 224 -> Test size: 320 = max accuracy on ImageNet with ResNet-50
 val_img_size = 512
-train_img_size = 480
+train_img_size = 420
 
 mean = (0.0, 0.0, 0.0)
 std = (5.0, 5.0, 5.0)
 max_value = 1.0
 
 train_transforms = A.Compose([
-    A.RandomResizedCrop(train_img_size, train_img_size, scale=(0.7, 1.0), ratio=(0.9, 1.1)),
+    A.RandomResizedCrop(train_img_size, train_img_size, scale=(0.9, 1.0), ratio=(0.9, 1.1)),
     A.OneOf([
         A.RandomRotate90(),
         A.Flip(),
     ]),
+    A.CoarseDropout(max_holes=4, max_height=32, max_width=32),
     A.Normalize(mean=mean, std=std, max_pixel_value=max_value),
     ToTensorV2()
 ])
@@ -85,7 +86,7 @@ train_loader, val_loader, train_eval_loader = get_train_val_loaders(
     limit_val_num_samples=100 if debug else None
 )
 
-accumulation_steps = 4
+accumulation_steps = 2
 
 prepare_batch = prepare_batch_fp32
 
@@ -103,7 +104,8 @@ def model_output_transform(y_pred):
 
 num_epochs = 100
 
-criterion = nn.CrossEntropyLoss(weight=torch.tensor([0.5, 2.0]))
+criterion = nn.CrossEntropyLoss(weight=torch.tensor([0.1, 2.0]))
+
 
 lr = 0.023
 weight_decay = 5e-4

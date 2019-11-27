@@ -1,6 +1,7 @@
 # This a training script launched with py_config_runner
 # It should obligatory contain `run(config, **kwargs)` method
 
+from collections.abc import Mapping
 from pathlib import Path
 
 import torch
@@ -64,7 +65,15 @@ def training(config):
         x, y = prepare_batch(batch, device=device, non_blocking=non_blocking)
         y_pred = model(x)
         y_pred = model_output_transform(y_pred)
-        loss = criterion(y_pred, y) / accumulation_steps
+        loss = criterion(y_pred, y)
+
+        if isinstance(loss, Mapping):
+            assert 'supervised batch loss' in loss
+            loss_dict = loss
+            output = {k: v.item() for k, v in loss_dict.items()}
+            loss = loss_dict['supervised batch loss'] / accumulation_steps
+        else:
+            output = {'supervised batch loss': loss.item()}
 
         with amp.scale_loss(loss, optimizer, loss_id=0) as scaled_loss:
             scaled_loss.backward()
@@ -73,13 +82,13 @@ def training(config):
             optimizer.step()
             optimizer.zero_grad()
 
-        return {
-            'supervised batch loss': loss.item(),
-        }
+        return output
 
-    trainer = setup_trainer(train_update_function, model, optimizer, config, metric_names=('supervised batch loss', ))
+    output_names = getattr(config, "output_names", ['supervised batch loss', ])
 
-    def output_transform(output):
+    trainer = setup_trainer(train_update_function, model, optimizer, config, metric_names=output_names)
+
+    def output_transform(output):        
         return output['y_pred'], output['y']
 
     num_classes = config.num_classes
@@ -93,7 +102,7 @@ def training(config):
         "Accuracy": cmAccuracy(cm_metric),
         "Precision": pr,
         "Recall": re,
-        "F1": Fbeta(beta=1.0, output_transform=output_transform)
+        # "F1": Fbeta(beta=1.0, output_transform=output_transform)
     }
 
     if hasattr(config, "val_metrics") and isinstance(config.val_metrics, dict):
@@ -112,16 +121,16 @@ def training(config):
 
     if start_by_validation:
         trainer.add_event_handler(Events.STARTED, run_validation)
-    trainer.add_event_handler(Events.EPOCH_STARTED(every=val_interval), run_validation)
+    trainer.add_event_handler(Events.EPOCH_COMPLETED(every=val_interval), run_validation)
     trainer.add_event_handler(Events.COMPLETED, run_validation)
 
     tb_logger = setup_tb_logging(trainer, optimizer, train_evaluator, evaluator, config)
     setup_mlflow_logging(trainer, optimizer, train_evaluator, evaluator)
 
-    save_best_model_by_val_score(evaluator, model, metric_name="F1", config=config)
+    save_best_model_by_val_score(evaluator, model, metric_name="mIoU_bg", config=config)
 
     if hasattr(config, "es_patience"):
-        add_early_stopping_by_val_score(evaluator, trainer, metric_name="F1", config=config)
+        add_early_stopping_by_val_score(evaluator, trainer, metric_name="mIoU_bg", config=config)
 
     # Log train/val predictions:
     tb_logger.attach(evaluator,

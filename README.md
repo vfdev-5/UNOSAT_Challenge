@@ -21,29 +21,38 @@
 
 * [ ] Trainings
     * [x] Train a Light-Weight RefineNet model
-    * [ ] Train DeeplabV3 model
+    * [ ] Train DeeplabV3 model -> failed
     * [x] Sampling based on target
 
 * [ ] Ideas to accelerate/improve training    
-    * [ ] Implement data echoing/minibatch persistence to accelerate trainings 
-    * [ ] Label smoothing
-    * [ ] Model with OctConv
-    * [ ] Train a pre-segmentation classifier ?
-    * [ ] Use CrossEntropy + Jaccard loss
-    * [ ] Try to implement and train GSCNN model
-
-* [ ] Training strategy 1
-    * [ ] Train on all data without validation
-        * [ ] 
+    * [ ] Implement data echoing/minibatch persistence to accelerate trainings ?
+    * [ ] Label smoothing ?
+    * [ ] Model with OctConv ?
+    * [ ] Train a pre-segmentation classifier ? 
+        => No need to do this. 
+        => LB F1 score is computed on complete image which should have ground truth pixels
+    * [x] Use CrossEntropy + Jaccard loss ?
+    * [ ] Try to implement and train GSCNN model ?
+    * [ ] Try Unsup Data Augmentation ?
+    * [ ] Validation with TTA ?
+        => depending on model, in some cases can improve predictions
 
 * [ ] Inferences
     * [ ] Handler to save images with predictions: `[img, img+preds, preds, img+gt, gt]` with a metric value, e.g. `IoU(1)`    
     * [x] Handler to save predictions as images with geo info(tile level)
     * [x] Script to aggregate predictions as images for the same city
         * [x] Check if images has the same geo extension    
-    * [x] Script to vectorize masks into shapefiles (city level)    
+    * [x] Script to vectorize masks into shapefiles (city level)
+    * [x] Add TTA using ttach package
     
-* [ ] Check submission score on which part of data
+* [x] Check submission score on which part of data => F1 score is computed on whole test dataset
+
+
+## Requirements
+
+- mlflow
+- git
+- linux libs for opencv-python
 
 
 ## MLflow setup
@@ -97,19 +106,27 @@ mlflow run experiments/ -e generate_tiles_stats -P input_path=../input/train_til
 ```
 
 
-## Training and inference
+## Training, validation and inference
 
-On a single node with single GPU:
+Training an a single node with single GPU:
 
 ```bash
 export MLFLOW_TRACKING_URI=$PWD/output/mlruns
 mlflow run experiments/ --experiment-name=Trainings -P script_path=code/scripts/training.py -P config_path=configs/train/XXX.py
 ```
 
+Validation:
 ```bash
 export MLFLOW_TRACKING_URI=$PWD/output/mlruns
-mlflow run experiments/ --experiment-name=Inferences -P script_path=code/scripts/inference.py -P config_path=configs/inference/XXX.py
+mlflow run experiments/ --experiment-name=Inferences -P script_path=code/scripts/inference.py -P config_path=configs/inference/validate_XYZ.py
 ```
+
+Inference on test data:
+```bash
+export MLFLOW_TRACKING_URI=$PWD/output/mlruns
+mlflow run experiments/ --experiment-name=Inferences -P script_path=code/scripts/inference.py -P config_path=configs/inference/test_XYZ.py
+```
+
 
 ## Transform predictions to submission format
 
@@ -117,6 +134,8 @@ mlflow run experiments/ --experiment-name=Inferences -P script_path=code/scripts
 export MLFLOW_TRACKING_URI=$PWD/output/mlruns
 mlflow run experiments/ -e to_submission -P input_path=output/mlruns/2/XYZ/artifacts/raw
 ```
+
+Shapefiles to submit are produced in the root of `input_path` folder.
 
 ### or manually every step
 

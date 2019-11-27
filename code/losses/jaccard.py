@@ -6,7 +6,7 @@ from ignite.utils import to_onehot
 
 class BinaryJaccardWithLogitsLoss(nn.Module):
 
-    def __init__(self, reduction=None):
+    def __init__(self, reduction='mean'):
         super(BinaryJaccardWithLogitsLoss, self).__init__()
         if isinstance(reduction, str):
             assert reduction in ('mean', 'sum')
@@ -36,12 +36,13 @@ class BinaryJaccardWithLogitsLoss(nn.Module):
 
 class SoftmaxJaccardWithLogitsLoss(nn.Module):
 
-    def __init__(self, reduction=None, ignore_index=None):
+    def __init__(self, reduction='mean', ignore_index=None, weights=None):
         super(SoftmaxJaccardWithLogitsLoss, self).__init__()
         if isinstance(reduction, str):
             assert reduction in ('mean', 'sum')
         self.reduction = reduction
         self.ignore_index = ignore_index
+        self.weights = weights
 
     def forward(self, y_pred, y):
         y_pred = torch.softmax(y_pred, dim=1)

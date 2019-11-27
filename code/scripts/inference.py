@@ -26,7 +26,7 @@ INFERENCE_CONFIG = TORCH_DL_BASE_CONFIG + (
     ("data_loader", DataLoader),
     ("model", torch.nn.Module),
     ("run_uuid", str),
-    ("weight_filename", str)
+    ("weights_filename", str)
 )
 
 
@@ -46,7 +46,7 @@ def inference(config):
         torch.backends.cudnn.benchmark = True
 
     # Load model and weights
-    model_weights_filepath = Path(get_artifact_path(config.run_uuid, config.weight_filename))
+    model_weights_filepath = Path(get_artifact_path(config.run_uuid, config.weights_filename))
     assert model_weights_filepath.exists(), \
         "Model weights file '{}' is not found".format(model_weights_filepath.as_posix())
 
@@ -61,11 +61,26 @@ def inference(config):
     non_blocking = getattr(config, "non_blocking", True)
     model_output_transform = getattr(config, "model_output_transform", lambda x: x)
 
+    tta_transforms = getattr(config, "tta_transforms", None)
+
     def eval_update_function(engine, batch):
         with torch.no_grad():
             x, y, meta = prepare_batch(batch, device=device, non_blocking=non_blocking)
-            y_pred = model(x)
-            y_pred = model_output_transform(y_pred)
+
+            if tta_transforms is not None:
+                y_preds = []
+                for t in tta_transforms:
+                    t_x = t.augment_image(x)
+                    t_y_pred = model(t_x)
+                    t_y_pred = model_output_transform(t_y_pred)
+                    y_pred = t.deaugment_mask(t_y_pred)
+                    y_preds.append(y_pred)
+
+                y_preds = torch.stack(y_preds, dim=0)
+                y_pred = torch.mean(y_preds, dim=0)
+            else:
+                y_pred = model(x)
+                y_pred = model_output_transform(y_pred)
             return {
                 "y_pred": y_pred,
                 "y": y,
@@ -91,7 +106,7 @@ def inference(config):
             "Accuracy": cmAccuracy(cm_metric),
             "Precision": pr,
             "Recall": re,
-            "F1": Fbeta(beta=1.0, output_transform=output_transform)
+            # "F1": Fbeta(beta=1.0, output_transform=output_transform)
         }
 
         if hasattr(config, "metrics") and isinstance(config.metrics, dict):
