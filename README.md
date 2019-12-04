@@ -19,23 +19,38 @@
     * [x] Generate tiles stats and fold indices
     * [x] Create pytorch datasets and dataloaders 
 
-* [ ] Trainings
-    * [x] Train a Light-Weight RefineNet model
-    * [ ] Train DeeplabV3 model -> failed
-    * [x] Sampling based on target
+* [x] Baselines
+    * [x] Train Light-Weight RefineNet model
+    * [x] Train ResNet-101 DeeplabV3 model 
+        => failed
+        => does not improve prediction quality
+        => very slow training
+    * [x] Sampling based on target    
 
 * [ ] Ideas to accelerate/improve training    
     * [ ] Implement data echoing/minibatch persistence to accelerate trainings ?
     * [ ] Label smoothing ?
     * [ ] Model with OctConv ?
-    * [ ] Train a pre-segmentation classifier ? 
+    * [x] Train a pre-segmentation classifier ? 
         => No need to do this. 
         => LB F1 score is computed on complete image which should have ground truth pixels
     * [x] Use CrossEntropy + Jaccard loss ?
     * [ ] Try to implement and train GSCNN model ?
     * [ ] Try Unsup Data Augmentation ?
-    * [ ] Validation with TTA ?
+    * [ ] Try Pseudo-Labelling of test data ?
+    * [x] Validation with TTA ?
         => depending on model, in some cases can improve predictions
+    * [x] Data normalization over training mean/std
+        * [x] Validate with LWRefineNet model on 3b => same as original 3b
+    * [x] Try different input data:
+        * [x] Generate on fly 3 input channels transformed by log(x^2)
+            * [x] Validate the change with LWRefineNet model => worse than original 3 channels
+        * [x] Generate on fly 5 input channels: (VH, VV, (VH + VV) * 0.5, VH - VV, sqrt(VH^2 + VV^2))
+            * [x] Validate the change with LWRefineNet model => same as original 3 channels
+        * [ ] Sample-wise min/max normalization with `x^0.2 - 0.5`
+            * [x] Validate the change with LWRefineNet model => same or worse than original 3 channels
+    * [ ] More features and channel's normalization
+        * [ ] VV * VH, VV / VH
 
 * [ ] Inferences
     * [ ] Handler to save images with predictions: `[img, img+preds, preds, img+gt, gt]` with a metric value, e.g. `IoU(1)`    
@@ -53,7 +68,7 @@ Experiment | Validation IoU(1)| Validation F1 | Test F1 | Notes
 ---|---|---|---|---
 [baseline_lwrefinenet.py](configs/train/baseline_lwrefinenet.py)| 0.648 | 0.891 | 0.688175 | LWRefineNet with CrossEntropy, validation city "38SNE"
 [baseline_lwrefinenet_xentropy_jaccard.py](configs/train/baseline_lwrefinenet_xentropy_jaccard.py)| 0.668 | 0.899 |  | LWRefineNet with CrossEntropy+2*Jaccard, validation city "38SNE"
-[baseline_lwrefinenet_xentropy_jaccard_tta.py](configs/train/baseline_lwrefinenet_xentropy_jaccard.py)| 0.668 | 0.899 |  | LWRefineNet with CrossEntropy+2*Jaccard, validation city "38SNE"
+[baseline_lwrefinenet_xentropy_jaccard_tta.py](configs/train/baseline_lwrefinenet_xentropy_jaccard.py)| 0.668 | 0.899 | 0.705516 | LWRefineNet with CrossEntropy+2*Jaccard, validation city "38SNE"
 
 
 ## Requirements

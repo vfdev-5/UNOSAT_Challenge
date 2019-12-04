@@ -30,9 +30,9 @@ def setup_trainer(train_update_function, model, optimizer, config, metric_names=
 
     # Checkpoint training
     checkpoint_handler = ModelCheckpoint(dirname=config.output_path.as_posix(),
-                                         filename_prefix="checkpoint",
-                                         save_interval=1000)
-    trainer.add_event_handler(Events.ITERATION_COMPLETED,
+                                         filename_prefix="checkpoint", 
+                                         require_empty=False)
+    trainer.add_event_handler(Events.ITERATION_COMPLETED(every=1000),
                               checkpoint_handler,
                               {'model': model, 'optimizer': optimizer})
 
@@ -69,20 +69,20 @@ def setup_evaluators(model, device, val_metrics, config):
                 "y": y
             }
 
-    test_evaluator = Engine(eval_update_function)
-    dev_evaluator = Engine(eval_update_function)
+    train_evaluator = Engine(eval_update_function)
+    evaluator = Engine(eval_update_function)
 
-    for name, metric in val_metrics.items():
-        metric.attach(dev_evaluator, name)
-        metric.attach(test_evaluator, name)
+    for name, metric in val_metrics.items():        
+        metric.attach(train_evaluator, name)
+        metric.attach(evaluator, name)
 
-    ProgressBar(persist=False, desc="Test Evaluation").attach(test_evaluator)
-    ProgressBar(persist=False, desc="Dev Evaluation").attach(dev_evaluator)
+    ProgressBar(persist=False, desc="Train Evaluation").attach(train_evaluator)
+    ProgressBar(persist=False, desc="Val Evaluation").attach(evaluator)
 
-    dev_evaluator.add_event_handler(Events.COMPLETED, empty_cuda_cache)
-    test_evaluator.add_event_handler(Events.COMPLETED, empty_cuda_cache)
+    train_evaluator.add_event_handler(Events.COMPLETED, empty_cuda_cache)
+    evaluator.add_event_handler(Events.COMPLETED, empty_cuda_cache)
 
-    return test_evaluator, dev_evaluator
+    return train_evaluator, evaluator
 
 
 class dynamic:
@@ -147,6 +147,7 @@ def save_best_model_by_val_score(evaluator, model, metric_name, config):
     best_model_handler = ModelCheckpoint(dirname=config.output_path.as_posix(),
                                          filename_prefix="best",
                                          n_saved=3,
+                                         require_empty=False,
                                          score_name="val_{}".format(metric_name.lower().replace(" ", "_")),
                                          score_function=score_function)
     evaluator.add_event_handler(Events.COMPLETED, best_model_handler, {'model': model, })

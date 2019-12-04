@@ -25,4 +25,5 @@ dependencies:
     - tiling
     - rasterio
     - git+https://github.com/qubvel/ttach.git
+    - git+https://github.com/qubvel/segmentation_models.pytorch.git
 

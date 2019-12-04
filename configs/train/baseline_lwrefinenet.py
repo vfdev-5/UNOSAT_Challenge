@@ -24,7 +24,7 @@ device = 'cuda'
 fp16_opt_level = "O2"
 
 num_classes = 2
-val_interval = 3
+val_interval = 1
 
 start_by_validation = False
 
@@ -84,7 +84,7 @@ train_loader, val_loader, train_eval_loader = get_train_val_loaders(
     limit_val_num_samples=100 if debug else None
 )
 
-# accumulation_steps = 8
+accumulation_steps = 2
 
 prepare_batch = prepare_batch_fp32
 

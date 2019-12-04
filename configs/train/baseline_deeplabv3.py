@@ -16,6 +16,9 @@ from dataflow.datasets import get_trainval_datasets
 from dataflow.dataloaders import get_train_val_loaders, get_train_sampler
 from dataflow.transforms import prepare_batch_fp32, denormalize
 
+from losses import SumOfLosses
+from losses.jaccard import SoftmaxJaccardWithLogitsLoss
+
 
 #################### Globals ####################
 
@@ -104,10 +107,14 @@ def model_output_transform(y_pred):
 
 num_epochs = 100
 
-criterion = nn.CrossEntropyLoss(weight=torch.tensor([0.1, 2.0]))
+names = ["cross entropy loss", "jaccard loss"]
+xentropy = nn.CrossEntropyLoss(weight=torch.tensor([0.1, 2.0]))
+jaccard_loss = SoftmaxJaccardWithLogitsLoss()
+criterion = SumOfLosses([xentropy, jaccard_loss], coeffs=[1.0, 2.0], names=names, total_loss_name="supervised batch loss")
 
+output_names = names + ["supervised batch loss", ]
 
-lr = 0.023
+lr = 0.045
 weight_decay = 5e-4
 momentum = 0.9
 nesterov = True

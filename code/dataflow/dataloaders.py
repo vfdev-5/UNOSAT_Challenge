@@ -111,3 +111,59 @@ def get_inference_dataloader(dataset: Type[Dataset],
                         batch_size=batch_size, num_workers=num_workers,
                         pin_memory=pin_memory, drop_last=False)
     return loader
+
+
+def get_train_mean_std(train_dataset, unique_id="", cache_dir="/tmp/unosat/"):
+    cache_dir = Path(cache_dir)
+    if not cache_dir.exists():
+        cache_dir.mkdir(parents=True)
+    
+    if len(unique_id) > 0:
+        unique_id += "_"
+
+    fp = cache_dir / "train_mean_std_{}{}.pth".format(len(train_dataset), unique_id)
+    
+    if fp.exists():
+        mean_std = torch.load(fp.as_posix())
+    else:
+        from ignite.engine import Engine
+        from ignite.metrics import VariableAccumulation, Average
+        from ignite.contrib.handlers import ProgressBar
+        from albumentations.pytorch import ToTensorV2
+
+        # Until https://github.com/pytorch/ignite/pull/681 is not merged
+        class _Average(Average):
+            def __init__(self, output_transform=lambda x: x, device=None):                
+                super(_Average, self).__init__(output_transform=output_transform, device=device)                
+                def _mean_op(a, x):
+                    if x.ndim > 1:
+                        x = x.sum(dim=0)            
+                    return a + x            
+                self._op = _mean_op
+
+        train_dataset = TransformedDataset(train_dataset, transform_fn=ToTensorV2())
+        train_loader = DataLoader(train_dataset, shuffle=False, drop_last=False, batch_size=16, num_workers=10, pin_memory=False)
+        
+        def compute_mean_std(engine, batch):
+            b, c, *_ = batch['image'].shape
+            data = batch['image'].reshape(b, c, -1).to(dtype=torch.float64)
+            mean = torch.mean(data, dim=-1)
+            mean2 = torch.mean(data ** 2, dim=-1)
+            
+            return {
+                "mean": mean,
+                "mean^2": mean2,
+            }
+
+        compute_engine = Engine(compute_mean_std)
+        ProgressBar(desc="Compute Mean/Std").attach(compute_engine)
+        img_mean = _Average(output_transform=lambda output: output['mean'])
+        img_mean2 = _Average(output_transform=lambda output: output['mean^2'])
+        img_mean.attach(compute_engine, 'mean')
+        img_mean2.attach(compute_engine, 'mean2')
+        state = compute_engine.run(train_loader)
+        state.metrics['std'] = torch.sqrt(state.metrics['mean2'] - state.metrics['mean'] ** 2)        
+        mean_std = {'mean': state.metrics['mean'], 'std': state.metrics['std']}
+        torch.save(mean_std, fp.as_posix())
+    
+    return mean_std['mean'].tolist(), mean_std['std'].tolist()

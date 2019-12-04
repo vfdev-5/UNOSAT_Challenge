@@ -1,6 +1,7 @@
 from typing import Sequence
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from torch.utils.data import Dataset, Subset
@@ -65,6 +66,74 @@ def read_img_mask(image, mask, **kwargs):
     return kwargs
 
 
+def linear_to_decibel(band):
+    band[band < 1e-8] = 1.0
+    return 10.0 * np.log10(band)
+
+
+def read_img_in_db_with_mask(image, mask, **kwargs):
+    img = read_image(image.as_posix(), dtype='float32')
+    img = linear_to_decibel(img)
+    kwargs['image'] = img
+    kwargs['mask'] = read_image(mask, dtype='uint8')
+    return kwargs
+
+
+def read_nimg_sqrt_mask(image, mask, **kwargs):
+    img = read_image(image.as_posix(), dtype='float32')
+
+    mins = img.reshape((-1, img.shape[2])).min(axis=0)[None, None, :]
+    maxs = img.reshape((-1, img.shape[2])).max(axis=0)[None, None, :]
+    nimg = (img - mins) / (maxs - mins + 1e-15)
+
+    nimg = np.power(nimg, 0.2) - 0.5
+
+    kwargs['image'] = nimg
+    kwargs['mask'] = read_image(mask, dtype='uint8')
+    return kwargs
+
+
+def read_img_2log_with_mask(image, mask, **kwargs):
+    img = read_image(image.as_posix(), dtype='float32')
+    img[img == 0] = np.exp(-5.0)
+    kwargs['image'] = np.log(img ** 2)
+    kwargs['mask'] = read_image(mask, dtype='uint8')
+    return kwargs
+
+
+def read_img_as_6b_with_mask(image, mask, **kwargs):
+    """Method to read image and mask, transform image to 5 channels:
+    (3 original bands, vv * vh, (vv + 0.01) / (vh + 0.01), sqrt(b1^2 + b2^2))
+    """
+    img3b = read_image(image.as_posix(), dtype='float32')
+
+    img6b = np.empty((img3b.shape[0], img3b.shape[1], 6), dtype=img3b.dtype)
+    img6b[:, :, (0, 1, 2)] = img3b
+    img6b[:, :, 3] = img3b[:, :, 1] * img3b[:, :, 0]
+    img6b[:, :, 4] = (img3b[:, :, 1] + 0.01) / (img3b[:, :, 0] + 0.01)
+    img6b[:, :, 5] = np.linalg.norm(img3b[:, :, (0, 1)], axis=-1)
+
+    kwargs['image'] = img6b
+    kwargs['mask'] = read_image(mask, dtype='uint8')
+    return kwargs
+
+
+def read_img_as_5b_with_mask(image, mask, **kwargs):
+    """Method to read image and mask, transform image to 5 channels:
+    (3 original bands, vv - vh, sqrt(b1^2 + b2^2))
+    """
+    img3b = read_image(image.as_posix(), dtype='float32')
+
+    img5b = np.empty((img3b.shape[0], img3b.shape[1], 5), dtype=img3b.dtype)
+    img5b[:, :, (0, 1, 2)] = img3b
+    img5b[:, :, 3] = img3b[:, :, 1] - img3b[:, :, 0]
+    img5b[:, :, 4] = np.linalg.norm(img3b[:, :, (0, 1)], axis=-1)
+
+    kwargs['image'] = img5b
+    kwargs['mask'] = read_image(mask, dtype='uint8')
+    return kwargs
+
+
 def read_img_only(image, **kwargs):
     kwargs['image'] = read_image(image.as_posix(), dtype='float32')
     return kwargs
@@ -84,7 +153,7 @@ def train_val_split(dataset: Dataset,
     return Subset(dataset, train_indices), Subset(dataset, val_indices)
 
 
-def get_trainval_datasets(path, csv_path, train_folds, val_folds):
+def get_trainval_datasets(path, csv_path, train_folds, val_folds, read_img_mask_fn=read_img_mask):
     ds = UnoSatTiles(path)
     df = pd.read_csv(csv_path)
     # remove tiles to skip
@@ -104,8 +173,8 @@ def get_trainval_datasets(path, csv_path, train_folds, val_folds):
     train_ds, val_ds = train_val_split(ds, train_indices, val_indices)
 
     # Include data reading transformation
-    train_ds = TransformedDataset(train_ds, transform_fn=read_img_mask)
-    val_ds = TransformedDataset(val_ds, transform_fn=read_img_mask)
+    train_ds = TransformedDataset(train_ds, transform_fn=read_img_mask_fn)
+    val_ds = TransformedDataset(val_ds, transform_fn=read_img_mask_fn)
 
     return train_ds, val_ds
 
