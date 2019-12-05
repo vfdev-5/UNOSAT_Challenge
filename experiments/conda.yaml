@@ -13,7 +13,7 @@ dependencies:
   - pip
   - gdal
   - pip:
-    - mlflow
+    - mlflow==1.4.0
     - tqdm
     - pynvml
     - tensorboardX

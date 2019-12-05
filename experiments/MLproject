@@ -38,7 +38,8 @@ entry_points:
     parameters:
       script_path: path
       config_path: path
-    command: "source env.sh && sh setup_apex.sh && python -m py_config_runner {script_path} {config_path}"
+      num_gpus: {type: float, default: 1}
+    command: "source env.sh && sh setup_apex.sh && python -m torch.distributed.launch --nproc_per_node={num_gpus} -m py_config_runner {script_path} {config_path} --manual_config_load"
 
   to_submission:
     parameters:

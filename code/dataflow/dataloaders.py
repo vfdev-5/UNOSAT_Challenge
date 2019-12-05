@@ -5,6 +5,7 @@ import numpy as np
 
 import tqdm
 import torch
+import torch.distributed as dist
 from torch.utils.data.sampler import WeightedRandomSampler
 from torch.utils.data import DataLoader, Sampler
 from torch.utils.data.dataset import Dataset, Subset
@@ -41,8 +42,8 @@ def get_train_val_loaders(train_ds: Type[Dataset],
                           num_workers: int = 8,
                           val_batch_size: Optional[int] = None,
                           pin_memory: bool = True,
-                          train_sampler: Optional[Union[Sampler, str]] = None,
-                          val_sampler: Optional[Union[Sampler, str]] = None,
+                          train_sampler: Optional[Sampler] = None,
+                          val_sampler: Optional[Sampler] = None,
                           limit_train_num_samples: Optional[int] = None,
                           limit_val_num_samples: Optional[int] = None) -> Tuple[DataLoader, DataLoader, DataLoader]:
 
@@ -67,14 +68,17 @@ def get_train_val_loaders(train_ds: Type[Dataset],
     val_ds = TransformedDataset(val_ds, transform_fn=val_transforms)
     train_eval_ds = TransformedDataset(train_eval_ds, transform_fn=val_transforms)
 
-    if isinstance(train_sampler, str):
-        assert train_sampler == 'distributed'
-        train_sampler = data_dist.DistributedSampler(train_ds)
+    if dist.is_available():
+        if train_sampler is not None:
+            train_sampler = DistributedProxySampler(train_sampler)
+        else:
+            train_sampler = data_dist.DistributedSampler(train_ds, shuffle=True)
 
-    if isinstance(val_sampler, str):
-        assert val_sampler == 'distributed'
-        # we shuffle validation for visualization purposes inside `predictions_gt_images_handler`
-        val_sampler = data_dist.DistributedSampler(val_ds, shuffle=True)
+        if val_sampler is not None:
+            val_sampler = DistributedProxySampler(val_sampler)
+        else:
+            # we shuffle validation for visualization purposes inside `predictions_gt_images_handler`
+            val_sampler = data_dist.DistributedSampler(val_ds, shuffle=True)
 
     train_loader = DataLoader(train_ds, shuffle=train_sampler is None,
                               batch_size=batch_size, num_workers=num_workers,
@@ -127,19 +131,9 @@ def get_train_mean_std(train_dataset, unique_id="", cache_dir="/tmp/unosat/"):
         mean_std = torch.load(fp.as_posix())
     else:
         from ignite.engine import Engine
-        from ignite.metrics import VariableAccumulation, Average
+        from ignite.metrics import Average
         from ignite.contrib.handlers import ProgressBar
         from albumentations.pytorch import ToTensorV2
-
-        # Until https://github.com/pytorch/ignite/pull/681 is not merged
-        class _Average(Average):
-            def __init__(self, output_transform=lambda x: x, device=None):                
-                super(_Average, self).__init__(output_transform=output_transform, device=device)                
-                def _mean_op(a, x):
-                    if x.ndim > 1:
-                        x = x.sum(dim=0)            
-                    return a + x            
-                self._op = _mean_op
 
         train_dataset = TransformedDataset(train_dataset, transform_fn=ToTensorV2())
         train_loader = DataLoader(train_dataset, shuffle=False, drop_last=False, batch_size=16, num_workers=10, pin_memory=False)
@@ -157,8 +151,8 @@ def get_train_mean_std(train_dataset, unique_id="", cache_dir="/tmp/unosat/"):
 
         compute_engine = Engine(compute_mean_std)
         ProgressBar(desc="Compute Mean/Std").attach(compute_engine)
-        img_mean = _Average(output_transform=lambda output: output['mean'])
-        img_mean2 = _Average(output_transform=lambda output: output['mean^2'])
+        img_mean = Average(output_transform=lambda output: output['mean'])
+        img_mean2 = Average(output_transform=lambda output: output['mean^2'])
         img_mean.attach(compute_engine, 'mean')
         img_mean2.attach(compute_engine, 'mean2')
         state = compute_engine.run(train_loader)
@@ -167,3 +161,46 @@ def get_train_mean_std(train_dataset, unique_id="", cache_dir="/tmp/unosat/"):
         torch.save(mean_std, fp.as_posix())
     
     return mean_std['mean'].tolist(), mean_std['std'].tolist()
+
+
+from torch.utils.data.distributed import DistributedSampler
+
+# Waiting until https://github.com/pytorch/pytorch/issues/23430 to be closed
+class DistributedProxySampler(DistributedSampler):
+    """Sampler that restricts data loading to a subset of input sampler indices.
+
+    It is especially useful in conjunction with
+    :class:`torch.nn.parallel.DistributedDataParallel`. In such case, each
+    process can pass a DistributedSampler instance as a DataLoader sampler,
+    and load a subset of the original dataset that is exclusive to it.
+
+    .. note::
+        Input sampler is assumed to be of constant size.
+
+    Arguments:
+        sampler: Input data sampler.
+        num_replicas (optional): Number of processes participating in
+            distributed training.
+        rank (optional): Rank of the current process within num_replicas.
+    """
+
+    def __init__(self, sampler, num_replicas=None, rank=None):        
+        super(DistributedProxySampler, self).__init__(sampler, num_replicas=num_replicas, rank=rank, shuffle=False)
+        self.sampler = sampler
+
+    def __iter__(self):
+        # deterministically shuffle based on epoch
+        torch.manual_seed(self.epoch)
+        indices = list(self.sampler)
+
+        # add extra samples to make it evenly divisible
+        indices += indices[:(self.total_size - len(indices))]
+        if len(indices) != self.total_size:
+            raise RuntimeError("{} vs {}".format(len(indices), self.total_size))
+
+        # subsample
+        indices = indices[self.rank:self.total_size:self.num_replicas]
+        if len(indices) != self.num_samples:
+            raise RuntimeError("{} vs {}".format(len(indices), self.num_samples))
+
+        return iter(indices)

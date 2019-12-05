@@ -99,7 +99,7 @@ model = LWRefineNet(num_channels=3, num_classes=num_classes)
 
 num_epochs = 50
 
-criterion = nn.CrossEntropyLoss(weight=torch.tensor([1.0, 1.0]))
+criterion = nn.CrossEntropyLoss(weight=torch.tensor([0.75, 1.5]))
 
 lr = 0.001
 weight_decay = 1e-4

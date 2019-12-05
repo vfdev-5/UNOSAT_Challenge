@@ -3,7 +3,7 @@
 
 ## TODO
 
-* [ ] EDA
+* [x] EDA
     - VV / VH float images
     - ortho-rectified => zero-pixel zones
     - what are exactly the targets ?
@@ -12,7 +12,7 @@
     - shape rasterization produces mask for zero ortho-rectified part of image
     - on test data, we can reduce variance using multiple images per city
 
-* [ ] Dataflow
+* [x] Dataflow
     * [x] Merge VV / VH -> (VH, VV, (VH + VV) * 0.5)
     * [x] Rasterize shape masks
     * [x] Generate tiles from the data
@@ -38,6 +38,8 @@
     * [ ] Try to implement and train GSCNN model ?
     * [ ] Try Unsup Data Augmentation ?
     * [ ] Try Pseudo-Labelling of test data ?
+    * [x] Try to train on all train dataset and validate on test dataset
+    * [ ] Try multiple-input architectures
     * [x] Validation with TTA ?
         => depending on model, in some cases can improve predictions
     * [x] Data normalization over training mean/std
@@ -47,10 +49,11 @@
             * [x] Validate the change with LWRefineNet model => worse than original 3 channels
         * [x] Generate on fly 5 input channels: (VH, VV, (VH + VV) * 0.5, VH - VV, sqrt(VH^2 + VV^2))
             * [x] Validate the change with LWRefineNet model => same as original 3 channels
-        * [ ] Sample-wise min/max normalization with `x^0.2 - 0.5`
+        * [x] Sample-wise min/max normalization with `x^0.2 - 0.5`
             * [x] Validate the change with LWRefineNet model => same or worse than original 3 channels
     * [ ] More features and channel's normalization
         * [ ] VV * VH, VV / VH
+    
 
 * [ ] Inferences
     * [ ] Handler to save images with predictions: `[img, img+preds, preds, img+gt, gt]` with a metric value, e.g. `IoU(1)`    
@@ -68,7 +71,9 @@ Experiment | Validation IoU(1)| Validation F1 | Test F1 | Notes
 ---|---|---|---|---
 [baseline_lwrefinenet.py](configs/train/baseline_lwrefinenet.py)| 0.648 | 0.891 | 0.688175 | LWRefineNet with CrossEntropy, validation city "38SNE"
 [baseline_lwrefinenet_xentropy_jaccard.py](configs/train/baseline_lwrefinenet_xentropy_jaccard.py)| 0.668 | 0.899 |  | LWRefineNet with CrossEntropy+2*Jaccard, validation city "38SNE"
-[baseline_lwrefinenet_xentropy_jaccard_tta.py](configs/train/baseline_lwrefinenet_xentropy_jaccard.py)| 0.668 | 0.899 | 0.705516 | LWRefineNet with CrossEntropy+2*Jaccard, validation city "38SNE"
+[baseline_lwrefinenet_xentropy_jaccard.py](configs/train/baseline_lwrefinenet_xentropy_jaccard.py)| 0.668 | 0.899 | 0.705516 | LWRefineNet with CrossEntropy+2*Jaccard, validation city "38SNE", inference with TTA
+[baseline_resnet50-unet.py](configs/train/baseline_resnet50-unet.py)| 0.668 | 0.899 | 0.701196 | UNet with ResNet50 with CrossEntropy, validation city "38SNE", inference with TTA
+
 
 
 ## Requirements
