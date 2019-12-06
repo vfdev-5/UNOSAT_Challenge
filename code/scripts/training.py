@@ -25,7 +25,7 @@ from py_config_runner.utils import set_seed
 from utils.handlers import predictions_gt_images_handler
 
 
-def training(config, local_rank):
+def training(config, local_rank, with_pbar_on_iters=True):
 
     if not getattr(config, "use_fp16", True):
         raise RuntimeError("This training script uses by default fp16 AMP")
@@ -100,7 +100,7 @@ def training(config, local_rank):
         to_save={'model': model, 'optimizer': optimizer},
         save_every_iters=1000, output_path=config.output_path.as_posix(),
         lr_scheduler=config.lr_scheduler, output_names=output_names,
-        with_pbars=True, log_every_iters=1
+        with_pbars=True, with_pbar_on_iters=with_pbar_on_iters, log_every_iters=1
     )
 
     def output_transform(output):        
@@ -130,12 +130,9 @@ def training(config, local_rank):
     train_evaluator = create_supervised_evaluator(**evaluator_args)
     evaluator = create_supervised_evaluator(**evaluator_args)
 
-    if dist.get_rank() == 0:
+    if dist.get_rank() == 0 and with_pbar_on_iters:
         ProgressBar(persist=False, desc="Train Evaluation").attach(train_evaluator)
         ProgressBar(persist=False, desc="Val Evaluation").attach(evaluator)
-
-    val_interval = getattr(config, "val_interval", 1)
-    start_by_validation = getattr(config, "start_by_validation", False)
 
     def run_validation(engine):
         train_evaluator.run(train_eval_loader)
@@ -187,58 +184,6 @@ def run(config, logger=None, local_rank=0, **kwargs):
     assert torch.backends.cudnn.enabled, "Nvidia/Amp requires cudnn backend to be enabled."
 
     dist.init_process_group("nccl", init_method="env://")
-    # As we passed config with option --manual_config_load
-    assert hasattr(config, "setup"), "We need to manually setup the configuration, please set --manual_config_load " \
-                                     "to py_config_runner"
-    config = config.setup()
-
-    assert_config(config, TRAINVAL_CONFIG)
-    # The following attributes are automatically added by py_config_runner
-    assert hasattr(config, "config_filepath") and isinstance(config.config_filepath, Path)
-    assert hasattr(config, "script_filepath") and isinstance(config.config_filepath, Path)
-
-    # dump python files to reproduce the run
-    mlflow.log_artifact(config.config_filepath.as_posix())
-    mlflow.log_artifact(config.script_filepath.as_posix())
-
-    output_path = mlflow.get_artifact_uri()
-    config.output_path = Path(output_path)
-
-    # dump python files to reproduce the run
-    mlflow.log_artifact(config.config_filepath.as_posix())
-    mlflow.log_artifact(config.script_filepath.as_posix())
-
-    output_path = mlflow.get_artifact_uri()
-    config.output_path = Path(output_path)
-
-    if dist.get_rank() == 0:
-        mlflow.log_params({
-            "pytorch version": torch.__version__,
-            "ignite version": ignite.__version__,
-        })
-        mlflow.log_params(get_params(config, TRAINVAL_CONFIG))
-
-    try:
-        training(config, local_rank=local_rank)
-    except KeyboardInterrupt:
-        logger.info("Catched KeyboardInterrupt -> exit")
-    except Exception as e:  # noqa
-        logger.exception("")
-        mlflow.log_param("Run Status", "FAILED")
-        dist.destroy_process_group()
-        raise e
-
-    mlflow.log_param("Run Status", "OK")
-    dist.destroy_process_group()
-
-
-
-def run(config, logger=None, local_rank=0, **kwargs):
-
-    assert torch.cuda.is_available()
-    assert torch.backends.cudnn.enabled, "Nvidia/Amp requires cudnn backend to be enabled."
-
-    dist.init_process_group("nccl", init_method="env://")
 
     # As we passed config with option --manual_config_load
     assert hasattr(config, "setup"), "We need to manually setup the configuration, please set --manual_config_load " \
@@ -267,7 +212,13 @@ def run(config, logger=None, local_rank=0, **kwargs):
         mlflow.log_params({'mean': config.mean, 'std': config.std})
 
     try:
-        training(config, local_rank=local_rank)
+        import os
+
+        with_pbar_on_iters = True
+        if "DISABLE_PBAR_ON_ITERS" in os.environ:
+            with_pbar_on_iters = False
+
+        training(config, local_rank=local_rank, with_pbar_on_iters=with_pbar_on_iters)
     except KeyboardInterrupt:
         logger.info("Catched KeyboardInterrupt -> exit")
     except Exception as e:  # noqa

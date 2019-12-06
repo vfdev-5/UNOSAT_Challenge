@@ -139,6 +139,13 @@ def read_img_only(image, **kwargs):
     return kwargs
 
 
+def read_img_in_db(image, **kwargs):
+    img = read_image(image.as_posix(), dtype='float32')
+    img = linear_to_decibel(img)
+    kwargs['image'] = img
+    return kwargs
+
+
 def get_fold_indices_dict(df, num_folds):
     folds_indices = {
         i: list(df[df['fold_index'] == i].index)

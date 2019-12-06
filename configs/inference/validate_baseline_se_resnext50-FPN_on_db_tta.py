@@ -4,14 +4,14 @@ from functools import partial
 
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
+from segmentation_models_pytorch import FPN
 
 import ttach as tta
 
-from dataflow.datasets import get_trainval_datasets
+from dataflow.datasets import get_trainval_datasets, read_img_in_db
 from dataflow.dataloaders import get_train_val_loaders
 from dataflow.transforms import inference_prepare_batch_f32, denormalize, TransformedDataset
 
-from models import LWRefineNet
 
 #################### Globals ####################
 
@@ -30,14 +30,15 @@ csv_path = os.path.join(data_path, "tile_stats.csv")
 train_folds = [0, 1, 2]
 val_folds = [3, ]
 
-train_ds, val_ds = get_trainval_datasets(data_path, csv_path, train_folds=train_folds, val_folds=val_folds)
+train_ds, val_ds = get_trainval_datasets(data_path, csv_path, train_folds=train_folds, val_folds=val_folds,
+                                         read_img_mask_fn=read_img_in_db)
 
 
-batch_size = 16
+batch_size = 32
 num_workers = 12
 
-mean = (0.0, 0.0, 0.0)
-std = (5.0, 5.0, 5.0)
+mean = [-17.398721187929123, -10.020421713800838, -12.10841437771272]
+std = [6.290316422115964, 5.776936185931195, 5.795418280085563]
 max_value = 1.0
 
 
@@ -63,9 +64,9 @@ img_denormalize = partial(denormalize, mean=mean, std=std)
 
 #################### Model ####################
 
-model = LWRefineNet(num_channels=3, num_classes=num_classes)
-run_uuid = "ad0f6a1b582b441a86c0c0121fcf59c3"
-weights_filename = "best_model_25_val_miou_bg=0.7500167.pth"
+model = FPN(encoder_name='se_resnext50_32x4d', classes=2, encoder_weights=None)
+run_uuid = "30187583292246f6999d499642372da9"
+weights_filename = "best_model_43_val_miou_bg=0.7530081542328186.pth"
 
 has_targets = True
 

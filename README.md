@@ -100,8 +100,15 @@ or check existing experiments:
 mlflow experiments list
 ```
 
-## Data preparations
+## Data setup and preparations
 
+Create symbolic links to downloaded data and output folder
+```bash
+ln -s /path/to/data input
+ln -s /path/to/output output
+```
+
+Setup mlflow tracking path
 ```bash
 export MLFLOW_TRACKING_URI=$PWD/output/mlruns
 ```

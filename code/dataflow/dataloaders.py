@@ -15,6 +15,11 @@ from dataflow.transforms import TransformedDataset
 
 
 def get_train_sampler(train_dataset, weight_per_class, cache_dir="/tmp/unosat/"):
+
+    # Ensure that only process 0 in distributed performs the computation, and the others will use the cache
+    if dist.get_rank() > 0:
+        torch.distributed.barrier()  # synchronization point for all processes > 0
+
     cache_dir = Path(cache_dir)
     if not cache_dir.exists():
         cache_dir.mkdir(parents=True)
@@ -28,7 +33,12 @@ def get_train_sampler(train_dataset, weight_per_class, cache_dir="/tmp/unosat/")
         for i, dp in tqdm.tqdm(enumerate(train_dataset), total=len(train_dataset)):
             y = (dp['mask'] > 0).any()
             weights[i] = weight_per_class[y]
-        torch.save(weights, fp.as_posix())
+
+        if dist.get_rank() < 1:
+            torch.save(weights, fp.as_posix())
+
+    if dist.get_rank() < 1:
+        torch.distributed.barrier()  # synchronization point for process 0
 
     sampler = WeightedRandomSampler(weights, num_samples=len(weights), replacement=True)
     return sampler
@@ -118,6 +128,10 @@ def get_inference_dataloader(dataset: Type[Dataset],
 
 
 def get_train_mean_std(train_dataset, unique_id="", cache_dir="/tmp/unosat/"):
+    # # Ensure that only process 0 in distributed performs the computation, and the others will use the cache
+    # if dist.get_rank() > 0:
+    #     torch.distributed.barrier()  # synchronization point for all processes > 0
+
     cache_dir = Path(cache_dir)
     if not cache_dir.exists():
         cache_dir.mkdir(parents=True)
@@ -130,13 +144,17 @@ def get_train_mean_std(train_dataset, unique_id="", cache_dir="/tmp/unosat/"):
     if fp.exists():
         mean_std = torch.load(fp.as_posix())
     else:
+        if dist.is_available() and dist.is_initialized():
+            raise RuntimeError("Current implementation of Mean/Std computation is not working in distrib config")
+
         from ignite.engine import Engine
         from ignite.metrics import Average
         from ignite.contrib.handlers import ProgressBar
         from albumentations.pytorch import ToTensorV2
 
         train_dataset = TransformedDataset(train_dataset, transform_fn=ToTensorV2())
-        train_loader = DataLoader(train_dataset, shuffle=False, drop_last=False, batch_size=16, num_workers=10, pin_memory=False)
+        train_loader = DataLoader(train_dataset, shuffle=False, drop_last=False,
+                                  batch_size=16, num_workers=10, pin_memory=False)
         
         def compute_mean_std(engine, batch):
             b, c, *_ = batch['image'].shape
@@ -151,19 +169,25 @@ def get_train_mean_std(train_dataset, unique_id="", cache_dir="/tmp/unosat/"):
 
         compute_engine = Engine(compute_mean_std)
         ProgressBar(desc="Compute Mean/Std").attach(compute_engine)
-        img_mean = Average(output_transform=lambda output: output['mean'])
-        img_mean2 = Average(output_transform=lambda output: output['mean^2'])
+        img_mean = Average(output_transform=lambda output: output['mean'], device='cuda')
+        img_mean2 = Average(output_transform=lambda output: output['mean^2'], device='cuda')
         img_mean.attach(compute_engine, 'mean')
         img_mean2.attach(compute_engine, 'mean2')
         state = compute_engine.run(train_loader)
         state.metrics['std'] = torch.sqrt(state.metrics['mean2'] - state.metrics['mean'] ** 2)        
         mean_std = {'mean': state.metrics['mean'], 'std': state.metrics['std']}
+
+        # if dist.get_rank() < 1:
         torch.save(mean_std, fp.as_posix())
-    
+
+    # if dist.get_rank() < 1:
+    #     torch.distributed.barrier()  # synchronization point for process 0
+
     return mean_std['mean'].tolist(), mean_std['std'].tolist()
 
 
 from torch.utils.data.distributed import DistributedSampler
+
 
 # Waiting until https://github.com/pytorch/pytorch/issues/23430 to be closed
 class DistributedProxySampler(DistributedSampler):

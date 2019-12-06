@@ -37,13 +37,17 @@ csv_path = os.path.join(data_path, "tile_stats.csv")
 train_folds = [0, 1, 3]
 val_folds = [2, ]
 
-train_ds, val_ds = get_trainval_datasets(data_path, csv_path, train_folds=train_folds, val_folds=val_folds, read_img_mask_fn=read_img_in_db_with_mask)
+train_ds, val_ds = get_trainval_datasets(data_path, csv_path, train_folds=train_folds, val_folds=val_folds,
+                                         read_img_mask_fn=read_img_in_db_with_mask)
 
 train_sampler = get_train_sampler(train_ds, weight_per_class=(0.5, 0.5))
-mean, std = get_train_mean_std(train_ds, unique_id="3b_in_db")
-print("Computed mean/std: {}/{}".format(mean, std))
+# ! This wont work in distributed !
+# mean, std = get_train_mean_std(train_ds, unique_id="3b_in_db")
+# print("Computed mean/std: {} / {}".format(mean, std))
+mean = [-17.398721187929123, -10.020421713800838, -12.10841437771272]
+std = [6.290316422115964, 5.776936185931195, 5.795418280085563]
 
-batch_size = 24
+batch_size = 23
 num_workers = 12
 val_batch_size = 24
 
@@ -99,9 +103,9 @@ model = FPN(encoder_name='se_resnext50_32x4d', classes=2)
 
 num_epochs = 50
 
-criterion = nn.CrossEntropyLoss(weight=torch.tensor([1.0, 1.0]))
+criterion = nn.CrossEntropyLoss(weight=torch.tensor([0.5, 1.5]))
 
-lr = 0.001
+lr = 0.002
 weight_decay = 1e-4
 optimizer = optim.Adam(model.parameters(), lr=1.0, weight_decay=weight_decay)
 
@@ -110,7 +114,13 @@ le = len(train_loader)
 
 
 def lambda_lr_scheduler(iteration, lr0, n, a):
-    return lr0 * pow((1.0 - 1.0 * iteration / n), a)
+    if iteration < n // 2:
+        n = n // 2
+        return lr0 * pow((1.0 - 1.0 * iteration / n), a)
+    else:
+        iteration -= n // 2
+        n -= n // 2 + 1
+        return 0.5 * lr0 * pow((1.0 - 1.0 * iteration / n), a)
 
 
 lr_scheduler = lrs.LambdaLR(optimizer, lr_lambda=partial(lambda_lr_scheduler, lr0=lr, n=num_epochs * le, a=0.9))

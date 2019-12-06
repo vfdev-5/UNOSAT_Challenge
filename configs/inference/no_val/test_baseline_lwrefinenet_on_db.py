@@ -3,16 +3,13 @@ import os
 from functools import partial
 
 import torch
-import torch.nn as nn
-import torch.optim as optim
-import torch.optim.lr_scheduler as lrs
 
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 
 import ttach as tta
 
-from dataflow.datasets import UnoSatTestTiles, read_img_only
+from dataflow.datasets import UnoSatTestTiles, read_img_in_db
 from dataflow.dataloaders import get_inference_dataloader
 from dataflow.transforms import inference_prepare_batch_f32, denormalize, TransformedDataset
 
@@ -32,7 +29,7 @@ assert "INPUT_PATH" in os.environ
 data_path = os.path.join(os.environ['INPUT_PATH'], "test_tiles")
 
 test_dataset = UnoSatTestTiles(data_path)
-test_dataset = TransformedDataset(test_dataset, transform_fn=read_img_only)
+test_dataset = TransformedDataset(test_dataset, transform_fn=read_img_in_db)
 
 batch_size = 3
 num_workers = 12

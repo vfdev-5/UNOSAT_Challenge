@@ -3,9 +3,6 @@ import os
 from functools import partial
 
 import torch
-import torch.nn as nn
-import torch.optim as optim
-import torch.optim.lr_scheduler as lrs
 
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
@@ -46,7 +43,6 @@ transforms = A.Compose([
     A.Normalize(mean=mean, std=std, max_pixel_value=max_value),
     ToTensorV2()
 ])
-
 
 data_loader = get_inference_dataloader(
     test_dataset,

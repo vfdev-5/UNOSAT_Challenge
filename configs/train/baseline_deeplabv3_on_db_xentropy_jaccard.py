@@ -40,13 +40,17 @@ csv_path = os.path.join(data_path, "tile_stats.csv")
 train_folds = [0, 1, 3]
 val_folds = [2, ]
 
-train_ds, val_ds = get_trainval_datasets(data_path, csv_path, train_folds=train_folds, val_folds=val_folds, read_img_mask_fn=read_img_in_db_with_mask)
+train_ds, val_ds = get_trainval_datasets(data_path, csv_path, train_folds=train_folds, val_folds=val_folds,
+                                         read_img_mask_fn=read_img_in_db_with_mask)
 
 train_sampler = get_train_sampler(train_ds, weight_per_class=(0.5, 0.5))
-mean, std = get_train_mean_std(train_ds, unique_id="3b_in_db")
-print("Computed mean/std: {}/{}".format(mean, std))
+# ! This wont work in distributed !
+# mean, std = get_train_mean_std(train_ds, unique_id="3b_in_db")
+# print("Computed mean/std: {} / {}".format(mean, std))
+mean = [-17.398721187929123, -10.020421713800838, -12.10841437771272]
+std = [6.290316422115964, 5.776936185931195, 5.795418280085563]
 
-batch_size = 10
+batch_size = 9
 num_workers = 12
 val_batch_size = 20
 
@@ -62,7 +66,7 @@ train_transforms = A.Compose([
     A.OneOf([
         A.RandomRotate90(),
         A.Flip(),
-    ]),    
+    ]),
     A.Normalize(mean=mean, std=std, max_pixel_value=max_value),
     ToTensorV2()
 ])
@@ -87,7 +91,7 @@ train_loader, val_loader, train_eval_loader = get_train_val_loaders(
     limit_val_num_samples=100 if debug else None
 )
 
-accumulation_steps = 4
+accumulation_steps = 2
 
 prepare_batch = prepare_batch_fp32
 
@@ -98,17 +102,20 @@ img_denormalize = partial(denormalize, mean=mean, std=std)
 
 model = deeplabv3_resnet101(num_classes=num_classes)
 
+
 def model_output_transform(y_pred):
     return y_pred['out']
 
 #################### Solver ####################
 
+
 num_epochs = 50
 
 names = ["cross entropy loss", "jaccard loss"]
-xentropy = nn.CrossEntropyLoss(weight=torch.tensor([1.0, 1.0]))
+xentropy = nn.CrossEntropyLoss(weight=torch.tensor([0.75, 1.5]))
 jaccard_loss = SoftmaxJaccardWithLogitsLoss()
-criterion = SumOfLosses([xentropy, jaccard_loss], coeffs=[1.0, 2.0], names=names, total_loss_name="supervised batch loss")
+criterion = SumOfLosses([xentropy, jaccard_loss], coeffs=[1.0, 3.0], names=names,
+                        total_loss_name="supervised batch loss")
 
 output_names = names + ["supervised batch loss", ]
 
