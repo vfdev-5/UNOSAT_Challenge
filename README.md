@@ -198,3 +198,8 @@ To visualize experiments and runs, user can start mlflow dashboard:
 mlflow server --backend-store-uri $PWD/output/mlruns --default-artifact-root $PWD/output/mlruns -p 6026 -h 0.0.0.0
 ```
 
+### Remove deleted MLflow runs 
+
+```bash
+for i in `mlflow runs list --experiment-id=1 -v deleted_only | awk '{ print $4 }' | awk '/[0-9]+/'`; do rm -R output/mlruns/1/$i; done
+```
