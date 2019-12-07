@@ -47,7 +47,7 @@ train_sampler = get_train_sampler(train_ds, weight_per_class=(0.5, 0.5))
 mean = [-17.398721187929123, -10.020421713800838, -12.10841437771272]
 std = [6.290316422115964, 5.776936185931195, 5.795418280085563]
 
-batch_size = 23
+batch_size = 22
 num_workers = 12
 val_batch_size = 24
 
@@ -103,9 +103,9 @@ model = FPN(encoder_name='se_resnext50_32x4d', classes=2)
 
 num_epochs = 50
 
-criterion = nn.CrossEntropyLoss(weight=torch.tensor([0.75, 1.5]))
+criterion = nn.CrossEntropyLoss(weight=torch.tensor([0.5, 1.5]))
 
-lr = 0.001
+lr = 0.002
 weight_decay = 1e-4
 optimizer = optim.Adam(model.parameters(), lr=1.0, weight_decay=weight_decay)
 
@@ -114,7 +114,13 @@ le = len(train_loader)
 
 
 def lambda_lr_scheduler(iteration, lr0, n, a):
-    return lr0 * pow((1.0 - 1.0 * iteration / n), a)
+    if iteration < n // 2:
+        n = n // 2
+        return lr0 * pow((1.0 - 1.0 * iteration / n), a)
+    else:
+        iteration -= n // 2
+        n -= n // 2 + 1
+        return 0.5 * lr0 * pow((1.0 - 1.0 * iteration / n), a)
 
 
 lr_scheduler = lrs.LambdaLR(optimizer, lr_lambda=partial(lambda_lr_scheduler, lr0=lr, n=num_epochs * le, a=0.9))

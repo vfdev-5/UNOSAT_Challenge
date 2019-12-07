@@ -1,5 +1,7 @@
 # This a script to run inference, it is launched with py_config_runner
 # It should obligatory contain `run(config, **kwargs)` method
+
+from collections.abc import Mapping
 from pathlib import Path
 
 import torch
@@ -111,14 +113,14 @@ def inference(config, local_rank, with_pbar_on_iters=True):
 
         for name, metric in val_metrics.items():
             metric.attach(evaluator, name)
-        
+
         if dist.get_rank() == 0:
             # Log val metrics:
             mlflow_logger = MLflowLogger()
             mlflow_logger.attach(evaluator,
-                                log_handler=OutputHandler(tag="validation",
-                                                        metric_names=list(val_metrics.keys())),
-                                event_name=Events.EPOCH_COMPLETED)
+                                 log_handler=OutputHandler(tag="validation",
+                                                           metric_names=list(val_metrics.keys())),
+                                 event_name=Events.EPOCH_COMPLETED)
 
     if dist.get_rank() == 0 and with_pbar_on_iters:
         ProgressBar(persist=True, desc="Inference").attach(evaluator)
@@ -129,8 +131,8 @@ def inference(config, local_rank, with_pbar_on_iters=True):
 
         if not has_targets:
             assert do_save_raw_predictions or do_save_overlayed_predictions, \
-                "If no targets, either do_save_overlayed_predictions or do_save_raw_predictions should be defined in the " \
-                "config and has value equal True"
+                "If no targets, either do_save_overlayed_predictions or do_save_raw_predictions should be " \
+                "defined in the config and has value equal True"
 
         # Save predictions
         if do_save_raw_predictions:
@@ -167,7 +169,7 @@ def run(config, logger=None, local_rank=0, **kwargs):
     # As we passed config with option --manual_config_load
     assert hasattr(config, "setup"), "We need to manually setup the configuration, please set --manual_config_load " \
                                      "to py_config_runner"
-    
+
     config = config.setup()
 
     assert_config(config, INFERENCE_CONFIG)
@@ -176,14 +178,14 @@ def run(config, logger=None, local_rank=0, **kwargs):
     assert hasattr(config, "config_filepath") and isinstance(config.config_filepath, Path)
     assert hasattr(config, "script_filepath") and isinstance(config.script_filepath, Path)
 
-    # dump python files to reproduce the run
-    mlflow.log_artifact(config.config_filepath.as_posix())
-    mlflow.log_artifact(config.script_filepath.as_posix())
-
-    output_path = mlflow.get_artifact_uri()
-    config.output_path = Path(output_path)
-
     if dist.get_rank() == 0:
+        output_path = mlflow.get_artifact_uri()
+        config.output_path = Path(output_path)
+
+        # dump python files to reproduce the run
+        mlflow.log_artifact(config.config_filepath.as_posix())
+        mlflow.log_artifact(config.script_filepath.as_posix())
+
         mlflow.log_params({
             "pytorch version": torch.__version__,
             "ignite version": ignite.__version__,
@@ -200,12 +202,13 @@ def run(config, logger=None, local_rank=0, **kwargs):
 
         inference(config, local_rank=local_rank, with_pbar_on_iters=with_pbar_on_iters)
     except KeyboardInterrupt:
-        logger.info("Catched KeyboardInterrupt -> exit")
-    except Exception as e:  # noqa
-        logger.exception("")
-        mlflow.log_param("Run Status", "FAILED")
+        pass
+    except Exception as e:
+        if dist.get_rank() == 0:
+            mlflow.log_param("Run Status", "FAILED")
         dist.destroy_process_group()
         raise e
 
-    mlflow.log_param("Run Status", "OK")
+    if dist.get_rank() == 0:
+        mlflow.log_param("Run Status", "OK")
     dist.destroy_process_group()

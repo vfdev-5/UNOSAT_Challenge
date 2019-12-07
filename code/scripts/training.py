@@ -188,14 +188,14 @@ def run(config, logger=None, local_rank=0, **kwargs):
     assert hasattr(config, "config_filepath") and isinstance(config.config_filepath, Path)
     assert hasattr(config, "script_filepath") and isinstance(config.script_filepath, Path)
 
-    # dump python files to reproduce the run
-    mlflow.log_artifact(config.config_filepath.as_posix())
-    mlflow.log_artifact(config.script_filepath.as_posix())
-
-    output_path = mlflow.get_artifact_uri()
-    config.output_path = Path(output_path)
-
     if dist.get_rank() == 0:
+        output_path = mlflow.get_artifact_uri()
+        config.output_path = Path(output_path)
+
+        # dump python files to reproduce the run
+        mlflow.log_artifact(config.config_filepath.as_posix())
+        mlflow.log_artifact(config.script_filepath.as_posix())
+
         mlflow.log_params({
             "pytorch version": torch.__version__,
             "ignite version": ignite.__version__,
@@ -212,12 +212,13 @@ def run(config, logger=None, local_rank=0, **kwargs):
 
         training(config, local_rank=local_rank, with_pbar_on_iters=with_pbar_on_iters)
     except KeyboardInterrupt:
-        logger.info("Catched KeyboardInterrupt -> exit")
-    except Exception as e:  # noqa
-        logger.exception("")
-        mlflow.log_param("Run Status", "FAILED")
+        pass
+    except Exception as e:
+        if dist.get_rank() == 0:
+            mlflow.log_param("Run Status", "FAILED")
         dist.destroy_process_group()
         raise e
 
-    mlflow.log_param("Run Status", "OK")
+    if dist.get_rank() == 0:
+        mlflow.log_param("Run Status", "OK")
     dist.destroy_process_group()
