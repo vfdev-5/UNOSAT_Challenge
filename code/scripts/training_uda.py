@@ -1,11 +1,16 @@
 # This a training script launched with py_config_runner
 # It should obligatory contain `run(config, **kwargs)` method
 
+# Unsupervised Data Augmentation training: https://arxiv.org/abs/1904.12848
+
 from collections.abc import Mapping
 from pathlib import Path
 
+import random
+
 import torch
 import torch.distributed as dist
+from torch.utils.data import DataLoader
 
 from apex import amp
 
@@ -22,6 +27,12 @@ from py_config_runner.config_utils import get_params, TRAINVAL_CONFIG, assert_co
 from py_config_runner.utils import set_seed
 
 from utils.handlers import predictions_gt_images_handler
+
+
+TRAINVAL_CONFIG += (
+    ('unsup_criterion', torch.nn.Module),
+    ('unsup_train_loader', DataLoader)
+)
 
 
 def training(config, local_rank, with_pbar_on_iters=True):
@@ -42,6 +53,13 @@ def training(config, local_rank, with_pbar_on_iters=True):
     assert hasattr(train_sampler, 'set_epoch') and callable(train_sampler.set_epoch), \
         "Train sampler should have a callable method `set_epoch`"
 
+    unsup_train_loader = config.unsup_train_loader
+    unsup_train_sampler = getattr(unsup_train_loader, "sampler", None)
+    assert unsup_train_sampler is not None, "Train loader of type '{}' " \
+                                      "should have attribute 'sampler'".format(type(unsup_train_loader))
+    assert hasattr(unsup_train_sampler, 'set_epoch') and callable(unsup_train_sampler.set_epoch), \
+        "Unsupervised train sampler should have a callable method `set_epoch`"
+
     train_eval_loader = config.train_eval_loader
     val_loader = config.val_loader
 
@@ -51,6 +69,7 @@ def training(config, local_rank, with_pbar_on_iters=True):
     model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[local_rank], output_device=local_rank)
     
     criterion = config.criterion.to(device)
+    unsup_criterion = config.unsup_criterion.to(device)
 
     # Setup trainer
     prepare_batch = getattr(config, "prepare_batch")
@@ -58,14 +77,47 @@ def training(config, local_rank, with_pbar_on_iters=True):
     accumulation_steps = getattr(config, "accumulation_steps", 1)
     model_output_transform = getattr(config, "model_output_transform", lambda x: x)
 
-    def train_update_function(engine, batch):
-        model.train()
+    def cycle(seq):
+        while True:
+            for i in seq:
+                yield i
 
+    unsup_train_loader_iter = cycle(unsup_train_loader)
+
+    def supervised_loss(batch):
         x, y = prepare_batch(batch, device=device, non_blocking=non_blocking)
         y_pred = model(x)
         y_pred = model_output_transform(y_pred)
         loss = criterion(y_pred, y)
+        return loss
 
+    def unsupervised_loss(batch):
+        x = batch['image']
+        x = convert_tensor(x, device=device, non_blocking=non_blocking)
+
+        y_pred_orig = model(x)
+
+        # Data augmentation: geom only
+        k = random.randint(1, 3)
+        x_aug = torch.rot90(x, k=k, dims=(2, 3))
+        y_pred_orig_aug = torch.rot90(y_pred_orig, k=k, dims=(2, 3))
+        if random.random() < 0.5:
+            x_aug = torch.flip(x_aug, dims=(2, ))
+            y_pred_orig_aug = torch.flip(y_pred_orig_aug, dims=(2, )) 
+        if random.random() < 0.5:
+            x_aug = torch.flip(x_aug, dims=(3, ))
+            y_pred_orig_aug = torch.flip(y_pred_orig_aug, dims=(3, )) 
+
+        y_pred_aug = model(x_aug)
+
+        loss = unsup_criterion(y_pred_aug, y_pred_orig_aug)
+
+        return loss
+
+    def train_update_function(engine, batch):
+        model.train()
+
+        loss = supervised_loss(batch)
         if isinstance(loss, Mapping):
             assert 'supervised batch loss' in loss
             loss_dict = loss
@@ -74,7 +126,16 @@ def training(config, local_rank, with_pbar_on_iters=True):
         else:
             output = {'supervised batch loss': loss.item()}
 
-        with amp.scale_loss(loss, optimizer, loss_id=0) as scaled_loss:
+        unsup_batch = next(unsup_train_loader_iter)
+        unsup_loss = unsupervised_loss(unsup_batch)
+
+        assert isinstance(unsup_loss, torch.Tensor)
+        output['unsupervised batch loss'] = unsup_loss.item()
+
+        total_loss = loss + engine.state.unsup_lambda * unsup_loss
+        output['total batch loss'] = total_loss.item()
+
+        with amp.scale_loss(total_loss, optimizer, loss_id=0) as scaled_loss:
             scaled_loss.backward()
 
         if engine.state.iteration % accumulation_steps == 0:
@@ -83,9 +144,25 @@ def training(config, local_rank, with_pbar_on_iters=True):
 
         return output
 
-    output_names = getattr(config, "output_names", ['supervised batch loss', ])
+    output_names = getattr(config, "output_names", 
+                           ['supervised batch loss', 'unsupervised batch loss', 'total batch loss'])
 
     trainer = Engine(train_update_function)
+
+    @trainer.on(Events.STARTED)
+    def init(engine):
+        if hasattr(config, "unsup_lambda_min"):
+            engine.state.unsup_lambda = config.unsup_lambda_min
+        else:
+            engine.state.unsup_lambda = getattr(config, "unsup_lambda", 0.001)
+
+    @trainer.on(Events.ITERATION_COMPLETED)
+    def update_unsup_params(engine):        
+        engine.state.unsup_lambda += getattr(config, "unsup_lambda_delta", 0.00001)
+        if hasattr(config, "unsup_lambda_max"):
+            m = config.unsup_lambda_max
+            engine.state.unsup_lambda = engine.state.unsup_lambda if engine.state.unsup_lambda < m else m
+
     common.setup_common_distrib_training_handlers(
         trainer, train_sampler,
         to_save={'model': model, 'optimizer': optimizer},

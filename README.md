@@ -71,7 +71,7 @@ Experiment | Validation IoU(1)| Validation F1 | Test F1 | Notes
 [baseline_lwrefinenet_xentropy_jaccard.py](configs/train/baseline_lwrefinenet_xentropy_jaccard.py)| 0.668 | 0.899 |  | LWRefineNet with CrossEntropy+2*Jaccard, validation city "38SNE"
 [baseline_lwrefinenet_xentropy_jaccard.py](configs/train/baseline_lwrefinenet_xentropy_jaccard.py)| 0.668 | 0.899 | 0.705516 | LWRefineNet with CrossEntropy+2*Jaccard, validation city "38SNE", inference with TTA
 [baseline_resnet50-unet.py](configs/train/baseline_resnet50-unet.py)| 0.668 | 0.899 | 0.701196 | UNet with ResNet50 with CrossEntropy, validation city "38SNE", inference with TTA
-[baseline_se_resnext50-FPN_on_db.py](configs/train/baseline_se_resnext50-FPN_on_db.py)| 0.696 | 0.909 |  | FPN with SE-ResNet50 with CrossEntropy, validation city "38SNE", inference with TTA
+[baseline_se_resnext50-FPN_on_db.py](configs/train/baseline_se_resnext50-FPN_on_db.py)| 0.696 | 0.909 | 0.742955 | FPN with SE-ResNet50 with CrossEntropy, validation city "38SNE", inference with TTA
 
 
 
