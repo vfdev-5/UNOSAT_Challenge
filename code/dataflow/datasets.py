@@ -79,6 +79,20 @@ def read_img_in_db_with_mask(image, mask, **kwargs):
     return kwargs
 
 
+def read_img_5b_in_db_with_mask(image, mask, **kwargs):
+    img = read_image(image.as_posix(), dtype='float32')
+    img = linear_to_decibel(img)
+    
+    img5b = np.empty((img.shape[0], img.shape[1], 5), dtype=img.dtype)
+    img5b[:, :, (0, 1, 2)] = img
+    img5b[:, :, 3] = img[:, :, 1] * img[:, :, 0]
+    img5b[:, :, 4] = (img[:, :, 1] + 1.0) / (img[:, :, 0] + 1.0)
+
+    kwargs['image'] = img5b
+    kwargs['mask'] = read_image(mask, dtype='uint8')
+    return kwargs
+
+
 def read_nimg_sqrt_mask(image, mask, **kwargs):
     img = read_image(image.as_posix(), dtype='float32')
 

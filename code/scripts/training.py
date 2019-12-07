@@ -8,7 +8,6 @@ import torch
 import torch.distributed as dist
 
 from apex import amp
-from apex.parallel import DistributedDataParallel as DDP
 
 import mlflow
 
@@ -36,14 +35,6 @@ def training(config, local_rank, with_pbar_on_iters=True):
 
     torch.backends.cudnn.benchmark = True
 
-    mlflow.log_params({
-        "cuda version": torch.version.cuda,
-        "cudnn version": torch.backends.cudnn.version(),
-        "pytorch version": torch.__version__,
-        "ignite version": ignite.__version__,
-    })
-    mlflow.log_params(get_params(config, TRAINVAL_CONFIG))
-
     train_loader = config.train_loader
     train_sampler = getattr(train_loader, "sampler", None)
     assert train_sampler is not None, "Train loader of type '{}' " \
@@ -57,7 +48,8 @@ def training(config, local_rank, with_pbar_on_iters=True):
     model = config.model.to(device)
     optimizer = config.optimizer
     model, optimizer = amp.initialize(model, optimizer, opt_level=getattr(config, "fp16_opt_level", "O2"), num_losses=1)
-    model = DDP(model, delay_allreduce=True)
+    model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[local_rank], output_device=local_rank)
+    
     criterion = config.criterion.to(device)
 
     # Setup trainer

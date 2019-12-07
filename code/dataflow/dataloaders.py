@@ -121,9 +121,13 @@ def get_inference_dataloader(dataset: Type[Dataset],
 
     dataset = TransformedDataset(dataset, transform_fn=transforms)
 
+    sampler = None
+    if dist.is_available():
+        sampler = data_dist.DistributedSampler(dataset, shuffle=False)
+
     loader = DataLoader(dataset, shuffle=False,
                         batch_size=batch_size, num_workers=num_workers,
-                        pin_memory=pin_memory, drop_last=False)
+                        sampler=sampler, pin_memory=pin_memory, drop_last=False)
     return loader
 
 
@@ -169,8 +173,8 @@ def get_train_mean_std(train_dataset, unique_id="", cache_dir="/tmp/unosat/"):
 
         compute_engine = Engine(compute_mean_std)
         ProgressBar(desc="Compute Mean/Std").attach(compute_engine)
-        img_mean = Average(output_transform=lambda output: output['mean'], device='cuda')
-        img_mean2 = Average(output_transform=lambda output: output['mean^2'], device='cuda')
+        img_mean = Average(output_transform=lambda output: output['mean'])
+        img_mean2 = Average(output_transform=lambda output: output['mean^2'])
         img_mean.attach(compute_engine, 'mean')
         img_mean2.attach(compute_engine, 'mean2')
         state = compute_engine.run(train_loader)

@@ -2,13 +2,15 @@
 import os
 from functools import partial
 
+import torch
+
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 from segmentation_models_pytorch import FPN
 
 import ttach as tta
 
-from dataflow.datasets import get_trainval_datasets, read_img_in_db
+from dataflow.datasets import get_trainval_datasets, read_img_in_db_with_mask
 from dataflow.dataloaders import get_train_val_loaders
 from dataflow.transforms import inference_prepare_batch_f32, denormalize, TransformedDataset
 
@@ -31,7 +33,7 @@ train_folds = [0, 1, 2]
 val_folds = [3, ]
 
 train_ds, val_ds = get_trainval_datasets(data_path, csv_path, train_folds=train_folds, val_folds=val_folds,
-                                         read_img_mask_fn=read_img_in_db)
+                                         read_img_mask_fn=read_img_in_db_with_mask)
 
 
 batch_size = 32

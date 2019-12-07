@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import torch
+import torch.distributed as dist
 from torch.utils.data import DataLoader
 
 import mlflow
@@ -30,20 +31,13 @@ INFERENCE_CONFIG = TORCH_DL_BASE_CONFIG + (
 )
 
 
-def inference(config):
+def inference(config, local_rank, with_pbar_on_iters=True):
 
-    set_seed(config.seed)
-    device = config.device
+    set_seed(config.seed + local_rank)
+    torch.cuda.set_device(local_rank)
+    device = 'cuda'
 
-    mlflow.log_params({
-        "pytorch version": torch.__version__,
-        "ignite version": ignite.__version__,
-    })
-    mlflow.log_params(get_params(config, INFERENCE_CONFIG))
-
-    if "cuda" in device:
-        # Turn on magic acceleration
-        torch.backends.cudnn.benchmark = True
+    torch.backends.cudnn.benchmark = True
 
     # Load model and weights
     model_weights_filepath = Path(get_artifact_path(config.run_uuid, config.weights_filename))
@@ -51,10 +45,13 @@ def inference(config):
         "Model weights file '{}' is not found".format(model_weights_filepath.as_posix())
 
     model = config.model.to(device)
+    model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[local_rank], output_device=local_rank)
+
     if hasattr(config, "custom_weights_loading"):
         config.custom_weights_loading(model, model_weights_filepath)
     else:
         model.load_state_dict(torch.load(model_weights_filepath))
+
     model.eval()
 
     prepare_batch = config.prepare_batch
@@ -114,42 +111,45 @@ def inference(config):
 
         for name, metric in val_metrics.items():
             metric.attach(evaluator, name)
+        
+        if dist.get_rank() == 0:
+            # Log val metrics:
+            mlflow_logger = MLflowLogger()
+            mlflow_logger.attach(evaluator,
+                                log_handler=OutputHandler(tag="validation",
+                                                        metric_names=list(val_metrics.keys())),
+                                event_name=Events.EPOCH_COMPLETED)
 
-        # Log val metrics:
-        mlflow_logger = MLflowLogger()
-        mlflow_logger.attach(evaluator,
-                             log_handler=OutputHandler(tag="validation",
-                                                       metric_names=list(val_metrics.keys())),
-                             event_name=Events.EPOCH_COMPLETED)
+    if dist.get_rank() == 0 and with_pbar_on_iters:
+        ProgressBar(persist=True, desc="Inference").attach(evaluator)
 
-    ProgressBar(persist=True, desc="Inference").attach(evaluator)
+    if dist.get_rank() == 0:
+        do_save_raw_predictions = getattr(config, "do_save_raw_predictions", True)
+        do_save_overlayed_predictions = getattr(config, "do_save_overlayed_predictions", True)
 
-    do_save_raw_predictions = getattr(config, "do_save_raw_predictions", True)
-    do_save_overlayed_predictions = getattr(config, "do_save_overlayed_predictions", True)
+        if not has_targets:
+            assert do_save_raw_predictions or do_save_overlayed_predictions, \
+                "If no targets, either do_save_overlayed_predictions or do_save_raw_predictions should be defined in the " \
+                "config and has value equal True"
 
-    if not has_targets:
-        assert do_save_raw_predictions or do_save_overlayed_predictions, \
-            "If no targets, either do_save_overlayed_predictions or do_save_raw_predictions should be defined in the " \
-            "config and has value equal True"
+        # Save predictions
+        if do_save_raw_predictions:
+            raw_preds_path = config.output_path / "raw"
+            raw_preds_path.mkdir(parents=True)
 
-    # Save predictions
-    if do_save_raw_predictions:
-        raw_preds_path = config.output_path / "raw"
-        raw_preds_path.mkdir(parents=True)
+            evaluator.add_event_handler(Events.ITERATION_COMPLETED,
+                                        save_raw_predictions_with_geoinfo,
+                                        raw_preds_path)
 
-        evaluator.add_event_handler(Events.ITERATION_COMPLETED,
-                                    save_raw_predictions_with_geoinfo,
-                                    raw_preds_path)
+        if do_save_overlayed_predictions:
+            overlayed_preds_path = config.output_path / "overlay"
+            overlayed_preds_path.mkdir(parents=True)
 
-    if do_save_overlayed_predictions:
-        overlayed_preds_path = config.output_path / "overlay"
-        overlayed_preds_path.mkdir(parents=True)
-
-        evaluator.add_event_handler(Events.ITERATION_COMPLETED,
-                                    save_overlayed_predictions,
-                                    overlayed_preds_path,
-                                    img_denormalize_fn=config.img_denormalize,
-                                    palette=default_palette)
+            evaluator.add_event_handler(Events.ITERATION_COMPLETED,
+                                        save_overlayed_predictions,
+                                        overlayed_preds_path,
+                                        img_denormalize_fn=config.img_denormalize,
+                                        palette=default_palette)
 
     evaluator.add_event_handler(Events.EXCEPTION_RAISED, report_exception)
 
@@ -157,7 +157,18 @@ def inference(config):
     evaluator.run(config.data_loader)
 
 
-def run(config, logger=None, **kwargs):
+def run(config, logger=None, local_rank=0, **kwargs):
+
+    assert torch.cuda.is_available()
+    assert torch.backends.cudnn.enabled, "Nvidia/Amp requires cudnn backend to be enabled."
+
+    dist.init_process_group("nccl", init_method="env://")
+
+    # As we passed config with option --manual_config_load
+    assert hasattr(config, "setup"), "We need to manually setup the configuration, please set --manual_config_load " \
+                                     "to py_config_runner"
+    
+    config = config.setup()
 
     assert_config(config, INFERENCE_CONFIG)
 
@@ -172,13 +183,29 @@ def run(config, logger=None, **kwargs):
     output_path = mlflow.get_artifact_uri()
     config.output_path = Path(output_path)
 
+    if dist.get_rank() == 0:
+        mlflow.log_params({
+            "pytorch version": torch.__version__,
+            "ignite version": ignite.__version__,
+        })
+        mlflow.log_params(get_params(config, INFERENCE_CONFIG))
+        mlflow.log_params({'mean': config.mean, 'std': config.std})
+
     try:
-        inference(config)
+        import os
+
+        with_pbar_on_iters = True
+        if "DISABLE_PBAR_ON_ITERS" in os.environ:
+            with_pbar_on_iters = False
+
+        inference(config, local_rank=local_rank, with_pbar_on_iters=with_pbar_on_iters)
     except KeyboardInterrupt:
         logger.info("Catched KeyboardInterrupt -> exit")
     except Exception as e:  # noqa
         logger.exception("")
         mlflow.log_param("Run Status", "FAILED")
+        dist.destroy_process_group()
         raise e
 
     mlflow.log_param("Run Status", "OK")
+    dist.destroy_process_group()
