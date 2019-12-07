@@ -50,7 +50,7 @@
         * [x] Sample-wise min/max normalization with `x^0.2 - 0.5`
             * [x] Validate the change with LWRefineNet model => same or worse than original 3 channels
     * [ ] More features and channel's normalization
-        * [ ] VV * VH, VV / VH
+        * [ ] VV * VH, VV / VH => small improvements for LWRefineNet, XYZ for SE-ResNet50-FPN
     
 
 * [ ] Inferences

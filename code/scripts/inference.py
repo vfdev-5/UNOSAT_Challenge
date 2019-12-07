@@ -178,9 +178,10 @@ def run(config, logger=None, local_rank=0, **kwargs):
     assert hasattr(config, "config_filepath") and isinstance(config.config_filepath, Path)
     assert hasattr(config, "script_filepath") and isinstance(config.script_filepath, Path)
 
+    output_path = mlflow.get_artifact_uri()
+    config.output_path = Path(output_path)
+
     if dist.get_rank() == 0:
-        output_path = mlflow.get_artifact_uri()
-        config.output_path = Path(output_path)
 
         # dump python files to reproduce the run
         mlflow.log_artifact(config.config_filepath.as_posix())

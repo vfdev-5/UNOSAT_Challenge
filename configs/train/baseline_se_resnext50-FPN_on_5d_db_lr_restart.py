@@ -9,12 +9,12 @@ import torch.optim.lr_scheduler as lrs
 
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
+from segmentation_models_pytorch import FPN
 
 from dataflow.datasets import get_trainval_datasets, read_img_5b_in_db_with_mask
 from dataflow.dataloaders import get_train_val_loaders, get_train_sampler, get_train_mean_std
 from dataflow.transforms import prepare_batch_fp32, denormalize
 
-from models import LWRefineNet
 
 #################### Globals ####################
 
@@ -41,11 +41,13 @@ train_ds, val_ds = get_trainval_datasets(data_path, csv_path, train_folds=train_
                                          read_img_mask_fn=read_img_5b_in_db_with_mask)
 
 train_sampler = get_train_sampler(train_ds, weight_per_class=(0.5, 0.5))
-
+# ! This wont work in distributed !
+# mean, std = get_train_mean_std(train_ds, unique_id="3b_in_db")
+# print("Computed mean/std: {} / {}".format(mean, std))
 mean = [-17.704988005545587, -10.33310725243658, -12.422949109368183, 213.3866453581477, 0.4748089840110086]
 std = [6.5437130712772795, 6.033536195001276, 6.063934363438651, 245.40096009414592, 238.8577452846451]
 
-batch_size = 24
+batch_size = 20
 num_workers = 12
 val_batch_size = 24
 
@@ -92,20 +94,20 @@ prepare_batch = prepare_batch_fp32
 
 
 # Image denormalization function to plot predictions with images
-def img_denormalize(nimg): 
+def img_denormalize(nimg):
     img = denormalize(nimg, mean=mean, std=std)
     return img[(0, 1, 2), :, :]
 
 
 #################### Model ####################
 
-model = LWRefineNet(num_channels=5, num_classes=num_classes)
+model = FPN(in_channels=5, encoder_name='se_resnext50_32x4d', classes=2)
 
 #################### Solver ####################
 
-num_epochs = 50
+num_epochs = 75
 
-criterion = nn.CrossEntropyLoss(weight=torch.tensor([0.5, 1.5]))
+criterion = nn.CrossEntropyLoss(weight=torch.tensor([0.62, 1.45]))
 
 lr = 0.001
 weight_decay = 1e-4
@@ -116,13 +118,13 @@ le = len(train_loader)
 
 
 def lambda_lr_scheduler(iteration, lr0, n, a):
-    if iteration < n // 2:
-        n = n // 2
+    if iteration < 3 * n // 4:
+        n = 3 * n // 4
         return lr0 * pow((1.0 - 1.0 * iteration / n), a)
     else:
-        iteration -= n // 2
-        n -= n // 2 + 1
-        return 0.5 * lr0 * pow((1.0 - 1.0 * iteration / n), a)
+        iteration -= 3 * n // 4
+        n -= 3 * n // 4 + 1
+        return 0.25 * lr0 * pow((1.0 - 1.0 * iteration / n), a)
 
 
 lr_scheduler = lrs.LambdaLR(optimizer, lr_lambda=partial(lambda_lr_scheduler, lr0=lr, n=num_epochs * le, a=0.9))
