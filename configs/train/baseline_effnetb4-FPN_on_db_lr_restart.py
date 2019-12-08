@@ -47,7 +47,7 @@ train_sampler = get_train_sampler(train_ds, weight_per_class=(0.5, 0.5))
 mean = [-17.398721187929123, -10.020421713800838, -12.10841437771272]
 std = [6.290316422115964, 5.776936185931195, 5.795418280085563]
 
-batch_size = 22
+batch_size = 16
 num_workers = 12
 val_batch_size = 24
 
@@ -90,7 +90,7 @@ train_loader, val_loader, train_eval_loader = get_train_val_loaders(
     limit_val_num_samples=100 if debug else None
 )
 
-accumulation_steps = 2
+accumulation_steps = 3
 
 prepare_batch = prepare_batch_fp32
 
@@ -99,7 +99,7 @@ img_denormalize = partial(denormalize, mean=mean, std=std)
 
 #################### Model ####################
 
-model = FPN(encoder_name='se_resnext50_32x4d', classes=num_classes)
+model = FPN(encoder_name='efficientnet-b4', classes=num_classes)
 
 #################### Solver ####################
 

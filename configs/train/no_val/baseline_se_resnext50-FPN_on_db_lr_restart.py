@@ -24,7 +24,7 @@ device = 'cuda'
 fp16_opt_level = "O2"
 
 num_classes = 2
-val_interval = 1
+val_interval = 1000
 
 start_by_validation = False
 
@@ -34,7 +34,7 @@ assert "INPUT_PATH" in os.environ
 data_path = os.path.join(os.environ['INPUT_PATH'], "train_tiles")
 csv_path = os.path.join(data_path, "tile_stats.csv")
 
-train_folds = [0, 1, 3]
+train_folds = [0, 1, 2, 3]
 val_folds = [2, ]
 
 train_ds, val_ds = get_trainval_datasets(data_path, csv_path, train_folds=train_folds, val_folds=val_folds,

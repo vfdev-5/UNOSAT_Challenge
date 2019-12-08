@@ -99,7 +99,7 @@ img_denormalize = partial(denormalize, mean=mean, std=std)
 
 #################### Model ####################
 
-model = FPN(encoder_name='se_resnext50_32x4d', classes=num_classes)
+model = FPN(encoder_name='dpn92', classes=num_classes)
 
 #################### Solver ####################
 

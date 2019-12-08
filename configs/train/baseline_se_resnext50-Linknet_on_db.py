@@ -9,7 +9,7 @@ import torch.optim.lr_scheduler as lrs
 
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
-from segmentation_models_pytorch import FPN
+from segmentation_models_pytorch import Linknet
 
 from dataflow.datasets import get_trainval_datasets, read_img_in_db_with_mask
 from dataflow.dataloaders import get_train_val_loaders, get_train_sampler, get_train_mean_std
@@ -47,7 +47,7 @@ train_sampler = get_train_sampler(train_ds, weight_per_class=(0.5, 0.5))
 mean = [-17.398721187929123, -10.020421713800838, -12.10841437771272]
 std = [6.290316422115964, 5.776936185931195, 5.795418280085563]
 
-batch_size = 22
+batch_size = 16
 num_workers = 12
 val_batch_size = 24
 
@@ -99,7 +99,7 @@ img_denormalize = partial(denormalize, mean=mean, std=std)
 
 #################### Model ####################
 
-model = FPN(encoder_name='se_resnext50_32x4d', classes=num_classes)
+model =Linknet(encoder_name='se_resnext50_32x4d', classes=2)
 
 #################### Solver ####################
 
@@ -116,13 +116,7 @@ le = len(train_loader)
 
 
 def lambda_lr_scheduler(iteration, lr0, n, a):
-    if iteration < 3 * n // 4:
-        n = 3 * n // 4
-        return lr0 * pow((1.0 - 1.0 * iteration / n), a)
-    else:
-        iteration -= 3 * n // 4
-        n -= 3 * n // 4 + 1
-        return 0.25 * lr0 * pow((1.0 - 1.0 * iteration / n), a)
+    return lr0 * pow((1.0 - 1.0 * iteration / n), a)
 
 
 lr_scheduler = lrs.LambdaLR(optimizer, lr_lambda=partial(lambda_lr_scheduler, lr0=lr, n=num_epochs * le, a=0.9))
