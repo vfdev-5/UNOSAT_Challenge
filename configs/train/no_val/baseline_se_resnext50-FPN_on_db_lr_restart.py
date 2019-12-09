@@ -47,7 +47,7 @@ train_sampler = get_train_sampler(train_ds, weight_per_class=(0.5, 0.5))
 mean = [-17.398721187929123, -10.020421713800838, -12.10841437771272]
 std = [6.290316422115964, 5.776936185931195, 5.795418280085563]
 
-batch_size = 22
+batch_size = 20
 num_workers = 12
 val_batch_size = 24
 
