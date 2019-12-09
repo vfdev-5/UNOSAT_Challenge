@@ -49,8 +49,8 @@
             * [x] Validate the change with LWRefineNet model => same as original 3 channels
         * [x] Sample-wise min/max normalization with `x^0.2 - 0.5`
             * [x] Validate the change with LWRefineNet model => same or worse than original 3 channels
-    * [ ] More features and channel's normalization
-        * [ ] VV * VH, VV / VH => small improvements for LWRefineNet, XYZ for SE-ResNet50-FPN
+    * [x] More features and channel's normalization
+        * [x] VV * VH, VV / VH => small improvements for LWRefineNet, did not work for SE-ResNet50-FPN
     
 
 * [ ] Inferences
@@ -72,7 +72,7 @@ Experiment | Validation IoU(1)| Validation F1 | Test F1 | Notes
 [baseline_lwrefinenet_xentropy_jaccard.py](configs/train/baseline_lwrefinenet_xentropy_jaccard.py)| 0.668 | 0.899 | 0.705516 | LWRefineNet with CrossEntropy+2*Jaccard, validation city "38SNE", inference with TTA
 [baseline_resnet50-unet.py](configs/train/baseline_resnet50-unet.py)| 0.668 | 0.899 | 0.701196 | UNet with ResNet50 with CrossEntropy, validation city "38SNE", inference with TTA
 [baseline_se_resnext50-FPN_on_db.py](configs/train/baseline_se_resnext50-FPN_on_db.py)| 0.696 | 0.909 | 0.742955 | FPN with SE-ResNet50 with CrossEntropy, validation city "38SNE", inference with TTA
-
+[baseline_se_resnext50-FPN_on_db_lr_restart:py](configs/train/baseline_se_resnext50-FPN_on_db_lr_restart.py)| 0.717 | 0.916 |  | FPN with SE-ResNet50 with CrossEntropy, better hyperparams, LR restarts, validation city "38SNE", inference with TTA
 
 
 ## Requirements
