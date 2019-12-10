@@ -32,8 +32,8 @@ assert "INPUT_PATH" in os.environ
 data_path = os.path.join(os.environ['INPUT_PATH'], "train_tiles")
 csv_path = os.path.join(data_path, "tile_stats.csv")
 
-train_folds = [0, 1, 2]
-val_folds = [3, ]
+train_folds = [0, 1, 3]
+val_folds = [2, ]
 
 train_ds, val_ds = get_trainval_datasets(data_path, csv_path, train_folds=train_folds, val_folds=val_folds)
 

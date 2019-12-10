@@ -78,7 +78,7 @@ def get_train_val_loaders(train_ds: Type[Dataset],
     val_ds = TransformedDataset(val_ds, transform_fn=val_transforms)
     train_eval_ds = TransformedDataset(train_eval_ds, transform_fn=val_transforms)
 
-    if dist.is_available():
+    if dist.is_available() and dist.is_initialized():
         if train_sampler is not None:
             train_sampler = DistributedProxySampler(train_sampler)
         else:
@@ -122,7 +122,7 @@ def get_inference_dataloader(dataset: Type[Dataset],
     dataset = TransformedDataset(dataset, transform_fn=transforms)
 
     sampler = None
-    if dist.is_available():
+    if dist.is_available() and dist.is_initialized():
         sampler = data_dist.DistributedSampler(dataset, shuffle=False)
 
     loader = DataLoader(dataset, shuffle=False,
