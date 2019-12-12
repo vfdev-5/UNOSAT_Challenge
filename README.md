@@ -1,7 +1,169 @@
 # [UNOSAT Challenge](https://challenge.phi-unet.com/)
 
+Humanitarian AI4EO Challenge For UNOSAT, ESA and CERN openlab to detect building footprints in Iraq and support the local government to plan reconstruction and development activities in the area.
 
-## TODO
+## Phase 1
+
+In this project we train convolutional neural networks.
+
+### Results
+
+Experiment | Validation IoU(1) | Validation F1 | Test F1 | Notes
+---|---|---|---|---
+[baseline_lwrefinenet.py](configs/train/baseline_lwrefinenet.py)| X | X | 0.688175 | LWRefineNet with CrossEntropy, validation city "38SNE"
+[baseline_lwrefinenet_xentropy_jaccard.py](configs/train/baseline_lwrefinenet_xentropy_jaccard.py)|  |  | 0.705516 | LWRefineNet with CrossEntropy+2*Jaccard, validation city "38SNE", inference with TTA
+[baseline_resnet50-unet.py](configs/train/baseline_resnet50-unet.py)| X | X | 0.701196 | UNet with ResNet50 with CrossEntropy, validation city "38SNE", inference with TTA
+[baseline_se_resnext50-FPN_on_db.py](configs/train/baseline_se_resnext50-FPN_on_db.py)| 0.543 | 0.847 | 0.742955 | FPN with SE-ResNet50 with CrossEntropy, validation city "38SNE", inference with TTA
+[baseline_se_resnext50-FPN_on_db_lr_restart:py](configs/train/baseline_se_resnext50-FPN_on_db_lr_restart.py)| 0.535 | 0.843 | 0.643489 | FPN with SE-ResNet50 with CrossEntropy, better hyperparams, LR restarts, validation city "38SNE", inference with TTA
+
+
+## Code architecture
+
+- code : project package providing data processing, training/validation/inference scripts and modules with dataflow, losses, models and utils.
+- configs : configuration files.
+- experiments : some bash scripts and [mlflow](https://mlflow.org/) related file to manage ML experiments.
+- notebooks : jupyter notebook for visual checkings and development.
+
+### Requirements
+
+- Linux OS, Python 3.X, pip
+- git
+- linux libs for opencv-python
+- [mlflow](https://mlflow.org/) : `pip install mlflow`
+
+### MLflow setup
+
+Setup mlflow output path as 
+```bash
+cd UNOSAT_Challenge
+export MLFLOW_TRACKING_URI=$PWD/output/mlruns
+```
+
+Create once "Trainings" and "Inferences" experiments
+```bash
+mlflow experiments create -n Trainings
+mlflow experiments create -n Inferences
+```
+or check existing experiments:
+```bash
+mlflow experiments list
+```
+
+### Data setup and preparations
+
+Create symbolic links to downloaded data and output folder
+```bash
+cd UNOSAT_Challenge
+ln -s /path/to/data input
+ln -s /path/to/output output
+```
+
+Setup mlflow tracking path
+```bash
+export MLFLOW_TRACKING_URI=$PWD/output/mlruns
+```
+
+Generate 3-bands files from VV / VH separate files
+```bash
+mlflow run experiments/ -e generate_3b_images -P input_path=../input/train -P output_path=../output/train/images_3b
+mlflow run experiments/ -e generate_3b_images -P input_path=../input/test -P output_path=../output/test/images_3b
+```
+
+Rasterize shape files:
+```bash
+mlflow run experiments/ -e rasterize -P input_path=../input/train -P output_path=../output/train/masks
+```
+
+Generate train tiles:
+```bash
+mlflow run experiments/ -e generate_tiles -P input_path=../output/train/images_3b -P output_path=../input/train_tiles/images
+mlflow run experiments/ -e generate_tiles -P input_path=../output/train/masks -P output_path=../input/train_tiles/masks
+```
+
+Generate test tiles:
+```bash
+mlflow run experiments/ -e generate_test_tiles -P input_path=../output/test/images_3b -P output_path=../input/test_tiles/images
+```
+
+Generate train tiles stats:
+```bash
+mlflow run experiments/ -e generate_tiles_stats -P input_path=../input/train_tiles/ -P output_path=../input/train_tiles/
+```
+
+
+### Training, validation and inference
+
+Training an a single node with 1 or N GPUs:
+
+```bash
+export MLFLOW_TRACKING_URI=$PWD/output/mlruns
+mlflow run experiments/ --experiment-name=Trainings -P script_path=code/scripts/training.py -P config_path=configs/train/XXX.py -P num_gpus=1
+```
+
+Validation:
+```bash
+export MLFLOW_TRACKING_URI=$PWD/output/mlruns
+mlflow run experiments/ --experiment-name=Inferences -P script_path=code/scripts/inference.py -P config_path=configs/inference/validate_XYZ.py
+```
+
+Inference on test data:
+```bash
+export MLFLOW_TRACKING_URI=$PWD/output/mlruns
+mlflow run experiments/ --experiment-name=Inferences -P script_path=code/scripts/inference.py -P config_path=configs/inference/test_XYZ.py
+```
+
+Ensembling multiple predictions 
+```bash
+export MLFLOW_TRACKING_URI=$PWD/output/mlruns
+mlflow run experiments/ --experiment-name=Inferences -e ensemble -P input_paths="$PWD/output/mlruns/2/48b27adb07794d6c901047307d304312/artifacts/raw/;$PWD/output/mlruns/2/38c8cca75f8b46a798224a146cdf4426/artifacts/raw/;$PWD/output/mlruns/2/3a0b1378668547f0967974fdb56bb710/artifacts/raw"
+```
+
+```
+mlflow run experiments/ --experiment-name=Inferences -e ensemble -P input_paths="$PWD/output/mlruns/2/6a07a8951aa742ab9e27f5cee6141ae5/artifacts/raw;$PWD/output/mlruns/2/d33943a940aa48ac82728ac100a8450f/artifacts/raw/;$PWD/output/mlruns/2/63bea2691c90458c8ffc4ac00648c9f0/artifacts/raw"
+```
+
+### Transform predictions to submission format
+
+```bash
+export MLFLOW_TRACKING_URI=$PWD/output/mlruns
+mlflow run experiments/ -e to_submission -P input_path=output/mlruns/2/XYZ/artifacts/raw
+```
+
+Shapefiles to submit are produced in the root of `input_path` folder.
+
+#### or manually every step
+
+1) Merge tiles into a single mask image:
+```bash
+export MLFLOW_TRACKING_URI=$PWD/output/mlruns
+mlflow run experiments/ -e merge_tiles -P input_path=output/mlruns/2/XYZ/artifacts/raw
+```
+
+2) Aggregate predictions by city
+```bash
+mlflow run experiments/ -e all_agg_by_city -P input_path=output/mlruns/2/XYZ/artifacts/raw/
+```
+
+3) Vectorize predictions
+```bash
+mlflow run experiments/ -e polygonize -P input_path=output/mlruns/2/XYZ/artifacts/raw/
+```
+
+### MLflow dashboard
+
+To visualize experiments and runs, user can start mlflow dashboard:
+
+```bash
+mlflow server --backend-store-uri $PWD/output/mlruns --default-artifact-root $PWD/output/mlruns -p 6026 -h 0.0.0.0
+```
+
+### Remove deleted MLflow runs 
+
+```bash
+for i in `mlflow runs list --experiment-id=1 -v deleted_only | awk '{ print $4 }' | awk '/[0-9]+/'`; do rm -R output/mlruns/1/$i; done
+```
+
+### TODO/Ideas
 
 * [x] EDA
     - VV / VH float images
@@ -63,143 +225,3 @@
     
 * [x] Check submission score on which part of data => F1 score is computed on whole test dataset
 
-## Results
-
-Experiment | Validation IoU(1) | Validation F1 | Test F1 | Notes
----|---|---|---|---
-[baseline_lwrefinenet.py](configs/train/baseline_lwrefinenet.py)| ~~0.648 | 0.891~~ | 0.688175 | LWRefineNet with CrossEntropy, validation city "38SNE"
-[baseline_lwrefinenet_xentropy_jaccard.py](configs/train/baseline_lwrefinenet_xentropy_jaccard.py)| ~~0.668 | 0.899~~ |  | LWRefineNet with CrossEntropy+2*Jaccard, validation city "38SNE"
-[baseline_lwrefinenet_xentropy_jaccard.py](configs/train/baseline_lwrefinenet_xentropy_jaccard.py)| ~~0.668 | 0.899~~ | 0.705516 | LWRefineNet with CrossEntropy+2*Jaccard, validation city "38SNE", inference with TTA
-[baseline_resnet50-unet.py](configs/train/baseline_resnet50-unet.py)| ~~0.668 | 0.899~~ | 0.701196 | UNet with ResNet50 with CrossEntropy, validation city "38SNE", inference with TTA
-[baseline_se_resnext50-FPN_on_db.py](configs/train/baseline_se_resnext50-FPN_on_db.py)| 0.543 | 0.847 | 0.742955 | FPN with SE-ResNet50 with CrossEntropy, validation city "38SNE", inference with TTA
-[baseline_se_resnext50-FPN_on_db_lr_restart:py](configs/train/baseline_se_resnext50-FPN_on_db_lr_restart.py)| 0.535 | 0.843 | 0.643489 | FPN with SE-ResNet50 with CrossEntropy, better hyperparams, LR restarts, validation city "38SNE", inference with TTA
-
-
-## Requirements
-
-- mlflow
-- git
-- linux libs for opencv-python
-
-
-## MLflow setup
-
-Setup mlflow output path as 
-```bash
-export MLFLOW_TRACKING_URI=$PWD/output/mlruns
-```
-
-Create once "Trainings" and "Inferences" experiments
-```bash
-mlflow experiments create -n Trainings
-mlflow experiments create -n Inferences
-```
-or check existing experiments:
-```bash
-mlflow experiments list
-```
-
-## Data setup and preparations
-
-Create symbolic links to downloaded data and output folder
-```bash
-ln -s /path/to/data input
-ln -s /path/to/output output
-```
-
-Setup mlflow tracking path
-```bash
-export MLFLOW_TRACKING_URI=$PWD/output/mlruns
-```
-
-Generate 3-bands files from VV / VH separate files
-```bash
-mlflow run experiments/ -e generate_3b_images -P input_path=../input/train -P output_path=../output/train/images_3b
-mlflow run experiments/ -e generate_3b_images -P input_path=../input/test -P output_path=../output/test/images_3b
-```
-
-Rasterize shape files:
-```bash
-mlflow run experiments/ -e rasterize -P input_path=../input/train -P output_path=../output/train/masks
-```
-
-Generate train tiles:
-```bash
-mlflow run experiments/ -e generate_tiles -P input_path=../output/train/images_3b -P output_path=../input/train_tiles/images
-mlflow run experiments/ -e generate_tiles -P input_path=../output/train/masks -P output_path=../input/train_tiles/masks
-```
-
-Generate test tiles:
-```bash
-mlflow run experiments/ -e generate_test_tiles -P input_path=../output/test/images_3b -P output_path=../input/test_tiles/images
-```
-
-Generate train tiles stats:
-```bash
-mlflow run experiments/ -e generate_tiles_stats -P input_path=../input/train_tiles/ -P output_path=../input/train_tiles/
-```
-
-
-## Training, validation and inference
-
-Training an a single node with single GPU:
-
-```bash
-export MLFLOW_TRACKING_URI=$PWD/output/mlruns
-mlflow run experiments/ --experiment-name=Trainings -P script_path=code/scripts/training.py -P config_path=configs/train/XXX.py
-```
-
-Validation:
-```bash
-export MLFLOW_TRACKING_URI=$PWD/output/mlruns
-mlflow run experiments/ --experiment-name=Inferences -P script_path=code/scripts/inference.py -P config_path=configs/inference/validate_XYZ.py
-```
-
-Inference on test data:
-```bash
-export MLFLOW_TRACKING_URI=$PWD/output/mlruns
-mlflow run experiments/ --experiment-name=Inferences -P script_path=code/scripts/inference.py -P config_path=configs/inference/test_XYZ.py
-```
-
-
-## Transform predictions to submission format
-
-```bash
-export MLFLOW_TRACKING_URI=$PWD/output/mlruns
-mlflow run experiments/ -e to_submission -P input_path=output/mlruns/2/XYZ/artifacts/raw
-```
-
-Shapefiles to submit are produced in the root of `input_path` folder.
-
-### or manually every step
-
-1) Merge tiles into a single mask image:
-```bash
-export MLFLOW_TRACKING_URI=$PWD/output/mlruns
-mlflow run experiments/ -e merge_tiles -P input_path=output/mlruns/2/XYZ/artifacts/raw
-```
-
-2) Aggregate predictions by city
-```bash
-mlflow run experiments/ -e all_agg_by_city -P input_path=output/mlruns/2/XYZ/artifacts/raw/
-```
-
-3) Vectorize predictions
-```bash
-mlflow run experiments/ -e polygonize -P input_path=output/mlruns/2/XYZ/artifacts/raw/
-```
-
-
-### MLflow dashboard
-
-To visualize experiments and runs, user can start mlflow dashboard:
-
-```bash
-mlflow server --backend-store-uri $PWD/output/mlruns --default-artifact-root $PWD/output/mlruns -p 6026 -h 0.0.0.0
-```
-
-### Remove deleted MLflow runs 
-
-```bash
-for i in `mlflow runs list --experiment-id=1 -v deleted_only | awk '{ print $4 }' | awk '/[0-9]+/'`; do rm -R output/mlruns/1/$i; done
-```

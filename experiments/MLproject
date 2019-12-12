@@ -41,6 +41,17 @@ entry_points:
       num_gpus: {type: float, default: 1}
     command: "source env.sh && sh setup_apex.sh && python -m torch.distributed.launch --nproc_per_node={num_gpus} -m py_config_runner {script_path} {config_path} --manual_config_load"
 
+  ensemble:
+    parameters:
+      input_paths: str
+    command: "source env.sh && python ../code/scripts/jobs/ensembling.py {input_paths}"
+
+  validate:
+    parameters:
+      preds_paths: path
+      gt_paths: path
+    command: "source env.sh && python ../code/scripts/jobs/validate.py {preds_paths} {gt_paths}"
+
   to_submission:
     parameters:
       input_path: path
