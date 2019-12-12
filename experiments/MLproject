@@ -48,9 +48,9 @@ entry_points:
 
   validate:
     parameters:
-      preds_paths: path
-      gt_paths: path
-    command: "source env.sh && python ../code/scripts/jobs/validate.py {preds_paths} {gt_paths}"
+      preds_path: path
+      gt_path: path
+    command: "source env.sh && python ../code/scripts/jobs/validate.py {preds_path} {gt_path}"
 
   to_submission:
     parameters:

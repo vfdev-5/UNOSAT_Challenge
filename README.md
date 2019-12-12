@@ -20,9 +20,14 @@ Experiment | Validation IoU(1) | Validation F1 | Test F1 | Notes
 ## Code architecture
 
 - code : project package providing data processing, training/validation/inference scripts and modules with dataflow, losses, models and utils.
-- configs : configuration files.
-- experiments : some bash scripts and [mlflow](https://mlflow.org/) related file to manage ML experiments.
+    - [code/scripts/training.py](code/scripts/training.py) train
+- configs : configuration files
+    - configuration is a python file, flexible and highly configurable without any other meta-languages
+- experiments : some bash scripts and [mlflow](https://mlflow.org/) related file to manage ML experiments in reproducible manner.
+    - software dependencies are setup in [experiments/conda.yaml](experiments/conda.yaml)
+    - job commands are defined in [experiments/MLproject](experiments/MLproject)
 - notebooks : jupyter notebook for visual checkings and development.
+
 
 ### Requirements
 
@@ -100,7 +105,7 @@ export MLFLOW_TRACKING_URI=$PWD/output/mlruns
 mlflow run experiments/ --experiment-name=Trainings -P script_path=code/scripts/training.py -P config_path=configs/train/XXX.py -P num_gpus=1
 ```
 
-Validation:
+Validation (load model, make prediction, compute metrics) on validation data:
 ```bash
 export MLFLOW_TRACKING_URI=$PWD/output/mlruns
 mlflow run experiments/ --experiment-name=Inferences -P script_path=code/scripts/inference.py -P config_path=configs/inference/validate_XYZ.py
@@ -118,8 +123,9 @@ export MLFLOW_TRACKING_URI=$PWD/output/mlruns
 mlflow run experiments/ --experiment-name=Inferences -e ensemble -P input_paths="$PWD/output/mlruns/2/48b27adb07794d6c901047307d304312/artifacts/raw/;$PWD/output/mlruns/2/38c8cca75f8b46a798224a146cdf4426/artifacts/raw/;$PWD/output/mlruns/2/3a0b1378668547f0967974fdb56bb710/artifacts/raw"
 ```
 
-```
-mlflow run experiments/ --experiment-name=Inferences -e ensemble -P input_paths="$PWD/output/mlruns/2/6a07a8951aa742ab9e27f5cee6141ae5/artifacts/raw;$PWD/output/mlruns/2/d33943a940aa48ac82728ac100a8450f/artifacts/raw/;$PWD/output/mlruns/2/63bea2691c90458c8ffc4ac00648c9f0/artifacts/raw"
+Run validation on predictions (validation tiles):
+```bash
+mlflow run experiments/ --experiment-name=Inferences -e validate -P preds_path=$PWD/output/mlruns/2/XYZ/artifacts/raw/ -P gt_path=$PWD/input/train_tiles/masks
 ```
 
 ### Transform predictions to submission format

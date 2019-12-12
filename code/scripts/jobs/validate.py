@@ -57,8 +57,8 @@ def run(preds_path, gt_path):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser("Validate predictions")
-    parser.add_argument("preds_path", type=str, help="Paths to predictions")
-    parser.add_argument("gt_path", type=str, help="Paths to ground-truth")
+    parser.add_argument("preds_path", type=str, help="Path to predictions")
+    parser.add_argument("gt_path", type=str, help="Path to ground-truth")
 
     args = parser.parse_args()
     
