@@ -2,27 +2,28 @@
 
 Humanitarian AI4EO Challenge For UNOSAT, ESA and CERN openlab to detect building footprints in Iraq and support the local government to plan reconstruction and development activities in the area.
 
-## Phase 1
+## Results for Phase 1
 
-In this project we train convolutional neural networks.
-
-### Results
+We are training conv neural networks for designed for the segmentation task:
 
 Experiment | Validation IoU(1) | Validation F1 | Test F1 | Notes
 ---|---|---|---|---
-[baseline_lwrefinenet.py](configs/train/baseline_lwrefinenet.py)| X | X | 0.688175 | LWRefineNet with CrossEntropy, validation city "38SNE"
-[baseline_lwrefinenet_xentropy_jaccard.py](configs/train/baseline_lwrefinenet_xentropy_jaccard.py)|  |  | 0.705516 | LWRefineNet with CrossEntropy+2*Jaccard, validation city "38SNE", inference with TTA
-[baseline_resnet50-unet.py](configs/train/baseline_resnet50-unet.py)| X | X | 0.701196 | UNet with ResNet50 with CrossEntropy, validation city "38SNE", inference with TTA
-[baseline_se_resnext50-FPN_on_db.py](configs/train/baseline_se_resnext50-FPN_on_db.py)| 0.543 | 0.847 | 0.742955 | FPN with SE-ResNet50 with CrossEntropy, validation city "38SNE", inference with TTA
-[baseline_se_resnext50-FPN_on_db_lr_restart:py](configs/train/baseline_se_resnext50-FPN_on_db_lr_restart.py)| 0.535 | 0.843 | 0.643489 | FPN with SE-ResNet50 with CrossEntropy, better hyperparams, LR restarts, validation city "38SNE", inference with TTA
+[baseline_lwrefinenet.py](configs/train/baseline_lwrefinenet.py)| 0.506 | 0.83 | 0.688175 | LWRefineNet with CrossEntropy, validation city "38SNE", c01b6ccf59474808b528f55ee13b497d
+[baseline_lwrefinenet_xentropy_jaccard.py](configs/train/baseline_lwrefinenet_xentropy_jaccard.py)| 0.524 | 0.838 | 0.705516 | LWRefineNet with CrossEntropy+2*Jaccard, validation city "38SNE", inference with TTA, df7c6ed4870a40c1b9dcf742a6c07f0a
+[baseline_resnet50-unet.py](configs/train/baseline_resnet50-unet.py)| 0.525 | 0.839 | 0.701196 | ResNet50+UNet with CrossEntropy, validation city "38SNE", inference with TTA, 2982bbc723e049f4839ea83d1900c2a2
+[baseline_lwrefinenet_on_5b_db.py](configs/train/baseline_lwrefinenet_on_5b_db.py)| 0.532 | 0.841 | - | LWRefineNet with CrossEntropy on 5 bands (dB), validation city "38SNE", inference with TTA, 48b27adb07794d6c901047307d304312
+[baseline_se_resnext50-FPN_on_db.py](configs/train/baseline_se_resnext50-FPN_on_db.py)| 0.535 | 0.843 | 0.742955 | SE-ResNet50+FPN with CrossEntropy on 3 bands (dB), validation city "38SNE", inference with TTA, 38c8cca75f8b46a798224a146cdf4426
+[baseline_se_resnext50-FPN_on_db_lr_restart:py](configs/train/baseline_se_resnext50-FPN_on_db_lr_restart.py)| 0.543 | 0.847 | 0.643489 | SE-ResNet50+FPN with CrossEntropy, other hyperparams, LR restarts, validation city "38SNE", inference with TTA, 3a0b1378668547f0967974fdb56bb710
 
 
 ## Code architecture
 
 - code : project package providing data processing, training/validation/inference scripts and modules with dataflow, losses, models and utils.
-    - [code/scripts/training.py](code/scripts/training.py) train
+    - [code/scripts/training.py](code/scripts/training.py) training script (single node, 1/N GPUs).
+    - [code/scripts/training_uda.py](code/scripts/training_uda.py) (Work-In-Progress) training script with Unsupervised Data Augmentation method (single node, 1/N GPUs).
+    - [code/scripts/inference.py](code/scripts/inference.py) inference script to validate a model or make predictions on the test dataset (single node, 1/N GPUs).
 - configs : configuration files
-    - configuration is a python file, flexible and highly configurable without any other meta-languages
+    - configuration is a python file, flexible and highly configurable without any meta-language
 - experiments : some bash scripts and [mlflow](https://mlflow.org/) related file to manage ML experiments in reproducible manner.
     - software dependencies are setup in [experiments/conda.yaml](experiments/conda.yaml)
     - job commands are defined in [experiments/MLproject](experiments/MLproject)

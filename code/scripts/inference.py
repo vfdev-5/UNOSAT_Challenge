@@ -52,7 +52,10 @@ def inference(config, local_rank, with_pbar_on_iters=True):
     if hasattr(config, "custom_weights_loading"):
         config.custom_weights_loading(model, model_weights_filepath)
     else:
-        model.load_state_dict(torch.load(model_weights_filepath))
+        state_dict = torch.load(model_weights_filepath)
+        if not all([k.startswith("module.") for k in state_dict]):
+            state_dict = {f"module.{k}": v for k, v in state_dict.items()}
+        model.load_state_dict(state_dict)
 
     model.eval()
 

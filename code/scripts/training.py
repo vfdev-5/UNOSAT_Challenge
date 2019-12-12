@@ -8,6 +8,7 @@ import torch
 import torch.distributed as dist
 
 from apex import amp
+from apex.parallel import DistributedDataParallel as DDP
 
 import mlflow
 
@@ -48,7 +49,7 @@ def training(config, local_rank, with_pbar_on_iters=True):
     model = config.model.to(device)
     optimizer = config.optimizer
     model, optimizer = amp.initialize(model, optimizer, opt_level=getattr(config, "fp16_opt_level", "O2"), num_losses=1)
-    model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[local_rank], output_device=local_rank)
+    model = DDP(model, delay_allreduce=True)
     
     criterion = config.criterion.to(device)
 

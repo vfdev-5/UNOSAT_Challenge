@@ -66,7 +66,14 @@ weights_filename = "best_model_1_val_miou_bg=0.7517839.pth"
 
 def custom_weights_loading(model, model_weights_filepath):
     state_dict = torch.load(model_weights_filepath)
-    model.load_state_dict(state_dict['model'])
+
+    if 'model' in state_dict:
+        state_dict = state_dict['model']
+
+    if not all([k.startswith("module.") for k in state_dict]):
+        state_dict = {f"module.{k}": v for k, v in state_dict.items()}
+
+    model.load_state_dict(state_dict)
 
 
 # TTA
