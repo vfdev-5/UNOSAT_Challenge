@@ -82,13 +82,12 @@ def get_train_val_loaders(train_ds: Type[Dataset],
         if train_sampler is not None:
             train_sampler = DistributedProxySampler(train_sampler)
         else:
-            train_sampler = data_dist.DistributedSampler(train_ds, shuffle=True)
+            train_sampler = data_dist.DistributedSampler(train_ds)
 
         if val_sampler is not None:
             val_sampler = DistributedProxySampler(val_sampler)
         else:
-            # we shuffle validation for visualization purposes inside `predictions_gt_images_handler`
-            val_sampler = data_dist.DistributedSampler(val_ds, shuffle=True)
+            val_sampler = data_dist.DistributedSampler(val_ds, shuffle=False)
 
     train_loader = DataLoader(train_ds, shuffle=train_sampler is None,
                               batch_size=batch_size, num_workers=num_workers,

@@ -35,6 +35,7 @@ Experiment | Validation IoU(1) | Validation F1 | Test F1 | Notes
 - Linux OS, Python 3.X, pip
 - git
 - linux libs for opencv-python
+- conda
 - [mlflow](https://mlflow.org/) : `pip install mlflow`
 
 ### MLflow setup
