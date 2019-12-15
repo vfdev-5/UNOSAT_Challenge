@@ -71,10 +71,15 @@ def linear_to_decibel(band):
     return 10.0 * np.log10(band)
 
 
-def read_img_in_db_with_mask(image, mask, **kwargs):
+def read_img_in_db(image, **kwargs):
     img = read_image(image.as_posix(), dtype='float32')
     img = linear_to_decibel(img)
     kwargs['image'] = img
+    return kwargs
+
+
+def read_img_in_db_with_mask(image, mask, **kwargs):
+    kwargs = read_img_in_db(image, **kwargs)
     kwargs['mask'] = read_image(mask, dtype='uint8')
     return kwargs
 
@@ -155,13 +160,6 @@ def read_img_as_5b_with_mask(image, mask, **kwargs):
 
 def read_img_only(image, **kwargs):
     kwargs['image'] = read_image(image.as_posix(), dtype='float32')
-    return kwargs
-
-
-def read_img_in_db(image, **kwargs):
-    img = read_image(image.as_posix(), dtype='float32')
-    img = linear_to_decibel(img)
-    kwargs['image'] = img
     return kwargs
 
 

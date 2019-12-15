@@ -67,11 +67,12 @@ def training(config, local_rank, with_pbar_on_iters=True):
 
     model = config.model.to(device)
     optimizer = config.optimizer
-    model, optimizer = amp.initialize(model, optimizer, opt_level=getattr(config, "fp16_opt_level", "O2"), num_losses=1)
+    model, optimizer = amp.initialize(model, optimizer, opt_level=getattr(config, "fp16_opt_level", "O2"), num_losses=2)
     model = DDP(model, delay_allreduce=True)
     
     criterion = config.criterion.to(device)
     unsup_criterion = config.unsup_criterion.to(device)
+    unsup_batch_num_repetitions = getattr(config, "unsup_batch_num_repetitions", 1)
 
     # Setup trainer
     prepare_batch = getattr(config, "prepare_batch")
@@ -93,9 +94,7 @@ def training(config, local_rank, with_pbar_on_iters=True):
         loss = criterion(y_pred, y)
         return loss
 
-    def unsupervised_loss(batch):
-        x = batch['image']
-        x = convert_tensor(x, device=device, non_blocking=non_blocking)
+    def unsupervised_loss(x):
 
         with torch.no_grad():
             y_pred_orig = model(x)
@@ -110,6 +109,8 @@ def training(config, local_rank, with_pbar_on_iters=True):
             if random.random() < 0.5:
                 x_aug = torch.flip(x_aug, dims=(3, ))
                 y_pred_orig_aug = torch.flip(y_pred_orig_aug, dims=(3, )) 
+
+            y_pred_orig_aug = y_pred_orig_aug.argmax(dim=1).long()
 
         y_pred_aug = model(x_aug.detach())
 
@@ -139,18 +140,24 @@ def training(config, local_rank, with_pbar_on_iters=True):
             optimizer.zero_grad()
 
         unsup_batch = next(unsup_train_loader_iter)
-        unsup_loss = engine.state.unsup_lambda * unsupervised_loss(unsup_batch)
+        unsup_x = unsup_batch['image']
+        unsup_x = convert_tensor(unsup_x, device=device, non_blocking=non_blocking)
+
+        for _ in range(unsup_batch_num_repetitions):
+            unsup_loss = engine.state.unsup_lambda * unsupervised_loss(unsup_x)
+
+            assert isinstance(unsup_loss, torch.Tensor)
+            output['unsupervised batch loss'] = unsup_loss.item()
+
+            with amp.scale_loss(unsup_loss, optimizer, loss_id=1) as scaled_loss:
+                scaled_loss.backward()
+
+            if engine.state.iteration % accumulation_steps == 0:
+                optimizer.step()
+                optimizer.zero_grad()
+
         unsup_batch = None
-
-        assert isinstance(unsup_loss, torch.Tensor)
-        output['unsupervised batch loss'] = unsup_loss.item()
-
-        with amp.scale_loss(unsup_loss, optimizer, loss_id=0) as scaled_loss:
-            scaled_loss.backward()
-
-        if engine.state.iteration % accumulation_steps == 0:
-            optimizer.step()
-            optimizer.zero_grad()
+        unsup_x = None
 
         total_loss = loss +  unsup_loss
         output['total batch loss'] = total_loss.item()

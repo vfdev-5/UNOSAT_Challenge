@@ -17,7 +17,7 @@ from dataflow.transforms import TransformedDataset
 def get_train_sampler(train_dataset, weight_per_class, cache_dir="/tmp/unosat/"):
 
     # Ensure that only process 0 in distributed performs the computation, and the others will use the cache
-    if dist.get_rank() > 0:
+    if dist.is_available() and dist.is_initialized() and dist.get_rank() > 0:
         torch.distributed.barrier()  # synchronization point for all processes > 0
 
     cache_dir = Path(cache_dir)
@@ -34,10 +34,10 @@ def get_train_sampler(train_dataset, weight_per_class, cache_dir="/tmp/unosat/")
             y = (dp['mask'] > 0).any()
             weights[i] = weight_per_class[y]
 
-        if dist.get_rank() < 1:
+        if dist.is_available() and dist.is_initialized() and dist.get_rank() < 1:
             torch.save(weights, fp.as_posix())
 
-    if dist.get_rank() < 1:
+    if dist.is_available() and dist.is_initialized() and dist.get_rank() < 1:
         torch.distributed.barrier()  # synchronization point for process 0
 
     sampler = WeightedRandomSampler(weights, num_samples=len(weights), replacement=True)
