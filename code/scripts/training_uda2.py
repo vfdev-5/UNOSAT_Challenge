@@ -1,7 +1,7 @@
 # This a training script launched with py_config_runner
 # It should obligatory contain `run(config, **kwargs)` method
 
-# Unsupervised Data Augmentation training: https://arxiv.org/abs/1904.12848
+# Training based on Unsupervised Data Augmentation training: https://arxiv.org/abs/1904.12848
 
 from collections.abc import Mapping
 from pathlib import Path
@@ -97,22 +97,23 @@ def training(config, local_rank, with_pbar_on_iters=True):
         x = batch['image']
         x = convert_tensor(x, device=device, non_blocking=non_blocking)
 
-        y_pred_orig = model(x)
+        with torch.no_grad():
+            y_pred_orig = model(x)
 
-        # Data augmentation: geom only
-        k = random.randint(1, 3)
-        x_aug = torch.rot90(x, k=k, dims=(2, 3))
-        y_pred_orig_aug = torch.rot90(y_pred_orig, k=k, dims=(2, 3))
-        if random.random() < 0.5:
-            x_aug = torch.flip(x_aug, dims=(2, ))
-            y_pred_orig_aug = torch.flip(y_pred_orig_aug, dims=(2, )) 
-        if random.random() < 0.5:
-            x_aug = torch.flip(x_aug, dims=(3, ))
-            y_pred_orig_aug = torch.flip(y_pred_orig_aug, dims=(3, )) 
+            # Data augmentation: geom only
+            k = random.randint(1, 3)
+            x_aug = torch.rot90(x, k=k, dims=(2, 3))
+            y_pred_orig_aug = torch.rot90(y_pred_orig, k=k, dims=(2, 3))
+            if random.random() < 0.5:
+                x_aug = torch.flip(x_aug, dims=(2, ))
+                y_pred_orig_aug = torch.flip(y_pred_orig_aug, dims=(2, )) 
+            if random.random() < 0.5:
+                x_aug = torch.flip(x_aug, dims=(3, ))
+                y_pred_orig_aug = torch.flip(y_pred_orig_aug, dims=(3, )) 
 
-        y_pred_aug = model(x_aug)
+        y_pred_aug = model(x_aug.detach())
 
-        loss = unsup_criterion(y_pred_aug, y_pred_orig_aug)
+        loss = unsup_criterion(y_pred_aug, y_pred_orig_aug.detach())
 
         return loss
 
@@ -128,22 +129,31 @@ def training(config, local_rank, with_pbar_on_iters=True):
         else:
             output = {'supervised batch loss': loss.item()}
         
-        unsup_batch = next(unsup_train_loader_iter)
-        unsup_loss = unsupervised_loss(unsup_batch)
-        unsup_batch = None
-
-        assert isinstance(unsup_loss, torch.Tensor)
-        output['unsupervised batch loss'] = unsup_loss.item()
-
-        total_loss = loss + engine.state.unsup_lambda * unsup_loss
-        output['total batch loss'] = total_loss.item()
-
-        with amp.scale_loss(total_loss, optimizer, loss_id=0) as scaled_loss:
+        # Difference with original UDA
+        # Apply separately grads from supervised/unsupervised parts
+        with amp.scale_loss(loss, optimizer, loss_id=0) as scaled_loss:
             scaled_loss.backward()
 
         if engine.state.iteration % accumulation_steps == 0:
             optimizer.step()
             optimizer.zero_grad()
+
+        unsup_batch = next(unsup_train_loader_iter)
+        unsup_loss = engine.state.unsup_lambda * unsupervised_loss(unsup_batch)
+        unsup_batch = None
+
+        assert isinstance(unsup_loss, torch.Tensor)
+        output['unsupervised batch loss'] = unsup_loss.item()
+
+        with amp.scale_loss(unsup_loss, optimizer, loss_id=0) as scaled_loss:
+            scaled_loss.backward()
+
+        if engine.state.iteration % accumulation_steps == 0:
+            optimizer.step()
+            optimizer.zero_grad()
+
+        total_loss = loss +  unsup_loss
+        output['total batch loss'] = total_loss.item()
 
         return output
 
@@ -233,6 +243,7 @@ def training(config, local_rank, with_pbar_on_iters=True):
         @trainer.on(Events.ITERATION_COMPLETED(every=100))
         def tblog_unsupervised_lambda(engine):
             tb_logger.writer.add_scalar("training/unsupervised lambda", engine.state.unsup_lambda, engine.state.iteration)
+            mlflow.log_metric("training unsupervised lambda", engine.state.unsup_lambda, step=engine.state.iteration)
 
         # Log train/val predictions:
         tb_logger.attach(evaluator,
